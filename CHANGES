@@ -27,7 +27,7 @@ Not released.
   a ``422`` response. Closes #726.
 - Fix: explict inclusive datasource projection is ignored. Closes #722.
 
-- Update: PyMongo 3.0+ is now required.
+- Update: PyMongo 3.1+ is now required.
 - Update: Flask-PyMongo 0.4+ is now required.
 
 - Dev: make sure all connections opened by the test suite are properly closed
