@@ -191,6 +191,7 @@ RETURN_MEDIA_AS_URL = False
 MEDIA_ENDPOINT = 'media'
 MEDIA_URL = 'regex("[a-f0-9]{24}")'
 MEDIA_BASE_URL = None
+MEDIA_DOWNLOAD = '_download'
 
 SCHEMA_ENDPOINT = None
 

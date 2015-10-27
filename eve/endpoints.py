@@ -168,7 +168,7 @@ def _resource():
     return request.endpoint.split('|')[0]
 
 
-def media_endpoint(_id):
+def media_endpoint(_id, filename=None):
     """ This endpoint is active when RETURN_MEDIA_AS_URL is True. It retrieves
     a media file and streams it to the client.
 
@@ -187,13 +187,14 @@ def media_endpoint(_id):
         if if_modified_since > file_.upload_date:
             return Response(status=304)
 
-    filename = getattr(file_, filename, None) or str(_id)
-
     headers = {
         'Last-Modified': date_to_rfc1123(file_.upload_date),
-        'Content-Length': file_.length,
-        'Content-Disposition': 'attachment; filename="{}"'.format(filename)        
+        'Content-Length': file_.length
     }
+
+    if config.MEDIA_DOWNLOAD in request.args:
+        fname = getattr(file_, 'filename', None) or filename or str(_id)
+        headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)
 
     response = Response(file_, headers=headers, mimetype=file_.content_type,
                         direct_passthrough=True)

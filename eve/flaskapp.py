@@ -900,6 +900,10 @@ class Eve(Flask, Events):
             self.add_url_rule(media_url, 'media',
                               view_func=media_endpoint, methods=['GET'])
 
+            media_url_with_filename = '%s/<filename>' % (media_url)
+            self.add_url_rule(media_url_with_filename, 'media_wname',
+                              view_func=media_endpoint, methods=['GET'])
+
     def _init_schema_endpoint(self):
         """Configures the schema endpoint if set in configuration.
         """
