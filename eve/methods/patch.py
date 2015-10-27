@@ -159,8 +159,9 @@ def patch_internal(resource, payload=None, concurrency_check=False,
             validation = validator.validate_update(updates, object_id,
                                                    original)
         if validation:
-            # Apply coerced values
-            updates = validator.document
+            # Apply coerced values. Only when validation is applied.
+            if not skip_validation:
+                updates = validator.document
 
             # sneak in a shadow copy if it wasn't already there
             late_versioning_catch(original, resource)
