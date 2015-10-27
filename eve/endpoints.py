@@ -187,9 +187,12 @@ def media_endpoint(_id):
         if if_modified_since > file_.upload_date:
             return Response(status=304)
 
+    filename = getattr(file_, filename, None) or str(_id)
+
     headers = {
         'Last-Modified': date_to_rfc1123(file_.upload_date),
         'Content-Length': file_.length,
+        'Content-Disposition': 'attachment; filename="{}"'.format(filename)        
     }
 
     response = Response(file_, headers=headers, mimetype=file_.content_type,
