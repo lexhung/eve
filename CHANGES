@@ -6,10 +6,23 @@ Here you can see the full list of changes between each Eve release.
 In Development
 --------------
 
+Version 0.6.2
+~~~~~~~~~~~~~
+
+- Fix: When ``SOFT_DELETE`` is active an exclusive ``datasource.projection``
+  causes a ``500`` error. Closes #752.
+
+- Update: PyMongo 3.1 is now required.
+- Update: Flask-PyMongo 0.4+ is now required.
+
+
+Stable
+------
+
 Version 0.6.1
 ~~~~~~~~~~~~~
 
-Not released.
+Released on 29 October, 2015
 
 - New: ``BULK_ENABLED`` enables/disables bulk insert. Defaults to ``True``
   (Julian Hille).
@@ -45,8 +58,6 @@ Not released.
 - Docs: add Eve-Swagger to Extensions page.
 - Docs: fix broken link to Mongo's capped collections (Nathan Reynolds).
 
-Stable
-------
 
 Version 0.6
 ~~~~~~~~~~~
