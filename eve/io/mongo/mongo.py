@@ -74,7 +74,7 @@ class Mongo(DataLayer):
     json_encoder_class = MongoJSONEncoder
 
     operators = set(
-        ['$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin'] +
+        ['$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin', '$eq'] +
         ['$or', '$and', '$not', '$nor'] +
         ['$mod', '$regex', '$text', '$where'] +
         ['$options', '$search', '$language'] +
@@ -248,7 +248,144 @@ class Mongo(DataLayer):
         if projection is not None:
             args['projection'] = projection
 
+        joins = self.parse_joins(resource)
+        if joins is not None and len(joins):
+            resource_collection = self.pymongo(resource).db[datasource]
+            return self.find_with_aggregation(resource_collection, args, joins)
+
         return self.pymongo(resource).db[datasource].find(**args)
+
+
+    def parse_joins(self, resource):
+        if not 'junctions' in config.DOMAIN[resource]: return
+        junctions = config.DOMAIN[resource]['junctions']
+
+        joins = []
+        for jfield in request.args.getlist('join'):
+            joins.append((jfield, 'outer', False))
+
+        for jfield in request.args.getlist('ujoin'):
+            joins.append((jfield, 'outer', True))
+
+        for jfield in request.args.getlist('ijoin'):
+            joins.append((jfield, 'inner', False))
+
+        for jfield in request.args.getlist('uijoin'):
+            joins.append((jfield, 'inner', True))
+
+        joins = map(lambda j: (j, junctions[j[0]]), filter(lambda j: j[0] in junctions, joins))
+
+        return joins
+
+
+    def parse_filter_query(self, where):
+        try:
+            spec = self._sanitize(json.loads(where))
+        except HTTPException as e:
+            # _sanitize() is raising an HTTP exception; let it fire.
+            raise
+        except:
+            # couldn't parse as mongo query; give the python parser a shot.
+            abort(400, description=debug_error_message(
+                'Unable to parse `where` clause'
+            ))
+
+        return spec
+
+
+    def find_with_aggregation(self, resource_collection, args, joins):
+        aggregation_stages  = [
+            ('$match', 'filter'),
+            ('$lookup', 'lookup'),
+            ('$project', 'projection'),
+            ('$unwind', 'unwind'),
+            ('$match', 'joined_match'),
+            ('$sort', 'sort'),
+            ('$skip', 'skip'),
+            ('$limit', 'limit'),
+            ('$group', 'group')
+        ]
+
+        if 'sort' in args:
+            from bson.son import SON
+            args['sort'] = SON(args['sort'])
+
+        _args = {}
+        for stage, key in aggregation_stages:
+            _args[key] = [args[key]] if key in args else []
+
+        for join, junction in joins:
+
+            jfield, jtype, unwind = join
+            local, fresource, foreign = junction
+
+            _args['lookup'].append({
+                'from': fresource,
+                'localField': local,
+                'foreignField': foreign,
+                'as': jfield
+            })
+
+            fquery = 'filter_{}'.format(jfield)
+
+            if fquery in request.args:
+                _where = request.args[fquery]
+                parsed_filter = self.parse_filter_query(_where)
+                rfield = '$'+jfield
+
+                _args['projection'][0].update({
+                    jfield: {
+                        '$filter': {
+                            'input': rfield,
+                            'as': 'item',
+                            'cond': parsed_filter
+                        }
+                    }
+                })
+
+                if unwind:
+                    _args['unwind'].append({
+                        'path': rfield,
+                        'preserveNullAndEmptyArrays': jtype != 'inner'
+                    })
+                elif jtype == 'inner':
+                    if len(_args['joined_match']) == 0:
+                        _args['joined_match'] = [{}]
+
+                    _args['joined_match'][0].update({
+                        jfield: {'$not': {'$size': 0}}
+                    })
+
+        pipeline = []
+        count_pipe = []
+        for stage, key in aggregation_stages:
+            for param in _args[key]:
+                op = {stage: param}
+                pipeline.append(op)
+
+                if not key in ['limit', 'skip']:
+                    count_pipe.append(op)
+
+        if config.DEBUG:
+            print 'PIPELINE:', json.dumps(pipeline, indent=2, cls=MongoJSONEncoder)
+
+        def _aggregation_count(*_, **kwargs):
+            try:
+                counter = resource_collection.aggregate(count_pipe + [{
+                    '$group': {
+                        '_id': None,
+                        'count': {'$sum': 1}
+                    }
+                }]).next()
+            except StopIteration:
+                return 0
+
+            return counter['count']
+
+        cursor = resource_collection.aggregate(pipeline)
+        cursor.count = _aggregation_count
+        return cursor
+
 
     def find_one(self, resource, req, **lookup):
         """ Retrieves a single document.

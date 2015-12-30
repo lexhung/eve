@@ -115,7 +115,13 @@ def get(resource, **lookup):
     last_modified = last_update if last_update > epoch() else None
 
     response[config.ITEMS] = documents
-    count = cursor.count(with_limit_and_skip=False)
+
+    try:
+      count = cursor.count(with_limit_and_skip=False)
+    except AttributeError:
+      count = (req.page - 1) * req.max_results + len(documents) + 1
+      response['_approx'] = True
+
     headers.append((config.HEADER_TOTAL_COUNT, count))
 
     if config.DOMAIN[resource]['hateoas']:
