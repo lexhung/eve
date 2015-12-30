@@ -897,10 +897,10 @@ Limitations
 ~~~~~~~~~~~
 Currently we support embedding of documents by references located in any
 subdocuments (nested dicts and lists). For example, a query
-``/invoices?/embedded={"user.friends":1}`` will return a document with ``user``
+``/invoices/?embedded={"user.friends":1}`` will return a document with ``user``
 and all his ``friends`` embedded, but only if ``user`` is a subdocument and
 ``friends`` is a list of reference (it could be a list of dicts, nested
-dict, ect.). This feature is about serialization on GET requests. There's no
+dict, etc.). This feature is about serialization on GET requests. There's no
 support for POST, PUT or PATCH of embedded documents.
 
 Document embedding is enabled by default.
@@ -1800,7 +1800,7 @@ Like any other API-maintained document, oplog entries also expose:
 - HATEOAS fields if that's enabled.
 
 If ``OPLOG_AUDIT`` is enabled entries also expose both client IP and changes
-applied to the document (for ``DELETE`` the whole document is included).
+applied to the document (for ``DELETE`` the whole document is included). 
 
 A typical oplog entry looks like this:
 
@@ -1831,6 +1831,11 @@ To save a little space (at least on MongoDB) field names have been shortened:
 handy in a variety of scenarios (like when the oplog is available to clients,
 more on this later).
 
+Please note that by default the ``c`` (changes) field is not included for
+``POST`` operations. You can add ``POST`` to the ``OPLOG_CHANGE_METHODS``
+setting (see :ref:`global`) if you whish the whole document to be included on
+every insertion.
+
 How is the oplog operated?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Six settings are dedicated to the OpLog:
@@ -1840,6 +1845,7 @@ Six settings are dedicated to the OpLog:
 - ``OPLOG_METHODS`` is a list of HTTP methods to be logged. Defaults to all of them.
 - ``OPLOG_ENDPOINT`` is the endpoint name. Defaults to ``None``.
 - ``OPLOG_AUDIT`` if enabled, IP addresses and changes are also logged. Defaults to ``True``.
+- ``OPLOG_CHANGE_METHODS`` determines which methods will log changes. Defaults to ['PATCH', 'PUT', 'DELETE'].
 
 As you can see the oplog feature is turned off by default. Also, since
 ``OPLOG_ENDPOINT`` defaults to ``None``, even if you switch the feature on no

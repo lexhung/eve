@@ -27,7 +27,7 @@ Alternatively, you can choose to provide a settings dictionary:
     my_settings = {
         'MONGO_HOST': 'localhost',
         'MONGO_PORT': 27017,
-        'MONGO_DBNAME': 'the_db_name'
+        'MONGO_DBNAME': 'the_db_name',
         'DOMAIN': {'contacts': {}} 
     }
 
@@ -596,6 +596,10 @@ uppercase.
                                     should be logged in the :ref:`oplog`.
                                     Defaults to ``['DELETE', 'POST', 'PATCH',
                                     'PUT']``.
+
+``OPLOG_CHANGE_METHODS``            List of HTTP methods which operations
+                                    will include changes into the :ref:`oplog` entry.
+                                    Defaults to ``['DELETE','PATCH', 'PUT']``.
 
 ``OPLOG_ENDPOINT``                  Name of the :ref:`oplog` endpoint. If the 
                                     endpoint is enabled it can be configured

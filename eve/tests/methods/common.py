@@ -168,6 +168,95 @@ class TestSerializer(TestBase):
                 self.assertTrue(False, "Serializing null dictionaries should "
                                        "not raise an exception.")
 
+    def test_serialize_null_list(self):
+        schema = {
+            'nullable_list': {
+                'type': 'list',
+                'nullable': True,
+                'schema': {
+                    'type': 'objectid'
+                }
+            }
+        }
+        doc = {
+            'nullable_list': None
+        }
+        with self.app.app_context():
+            try:
+                serialize(doc, schema=schema)
+            except Exception:
+                self.fail('Serializing null lists'
+                          ' should not raise an exception')
+
+    def test_serialize_number(self):
+        schema = {
+            'anumber': {
+                'type': 'number',
+            }
+        }
+        for expected_type, value in [(int, '35'), (float, '3.5')]:
+            doc = {
+                'anumber': value
+            }
+            with self.app.app_context():
+                serialized = serialize(doc, schema=schema)
+                self.assertTrue(
+                    isinstance(serialized['anumber'], expected_type)
+                )
+
+    def test_serialize_inside_x_of_rules(self):
+        for x_of in ['allof', 'anyof', 'oneof', 'noneof']:
+            schema = {
+                'x_of-field': {
+                    x_of: [
+                        {'type': 'objectid'},
+                        {'required': True}
+                    ]
+                }
+            }
+            doc = {'x_of-field': '50656e4538345b39dd0414f0'}
+            with self.app.app_context():
+                serialized = serialize(doc, schema=schema)
+                self.assertTrue(isinstance(serialized['x_of-field'], ObjectId))
+
+    def test_serialize_inside_nested_x_of_rules(self):
+        schema = {
+            'nested-x_of-field': {
+                'oneof': [
+                    {
+                        'anyof': [
+                            {'type': 'objectid'},
+                            {'type': 'datetime'}
+                        ],
+                        'required': True
+                    },
+                    {
+                        'allof': [
+                            {'type': 'boolean'},
+                            {'required': True}
+                        ]
+                    }
+                ]
+            }
+        }
+        doc = {'nested-x_of-field': '50656e4538345b39dd0414f0'}
+        with self.app.app_context():
+            serialized = serialize(doc, schema=schema)
+            self.assertTrue(
+                isinstance(serialized['nested-x_of-field'], ObjectId))
+
+    def test_serialize_inside_x_of_typesavers(self):
+        for x_of in ['allof', 'anyof', 'oneof', 'noneof']:
+            schema = {
+                'x_of-field': {
+                    '{0}_type'.format(x_of): ['objectid', 'float', 'boolean']
+                }
+            }
+            doc = {'x_of-field': '50656e4538345b39dd0414f0'}
+            with self.app.app_context():
+                serialized = serialize(doc, schema=schema)
+                self.assertTrue(isinstance(serialized['x_of-field'], ObjectId))
+
 
 class TestNormalizeDottedFields(TestBase):
     def test_normalize_dotted_fields(self):
@@ -250,7 +339,7 @@ class TestOpLogBase(TestBase):
         self.assertTrue('o' in entry)
         self.assertEqual(entry['o'], op)
         self.assertTrue('127.0.0.1' in entry['ip'])
-        if op in ('PATCH', 'PUT', 'DELETE'):
+        if op in self.app.config['OPLOG_CHANGE_METHODS']:
             self.assertTrue('c' in entry)
 
 
@@ -259,6 +348,8 @@ class TestOpLogEndpointDisabled(TestOpLogBase):
         super(TestOpLogEndpointDisabled, self).setUp()
 
         self.app.config['OPLOG'] = True
+        from eve.default_settings import OPLOG_CHANGE_METHODS
+        self.app.config['OPLOG_CHANGE_METHODS'] = OPLOG_CHANGE_METHODS
         self.oplog_reset()
 
     def test_post_oplog(self):

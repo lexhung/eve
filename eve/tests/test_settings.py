@@ -143,6 +143,9 @@ contacts = {
         },
         'afloat': {
             'type': 'float',
+        },
+        'anumber': {
+            'type': 'number'
         }
     }
 }
@@ -299,6 +302,12 @@ child_products = copy.deepcopy(products)
 child_products['url'] = 'products/<regex("[A-Z]+"):parent_product>/children'
 child_products['datasource'] = {'source': 'products'}
 
+exclusion = copy.deepcopy(contacts)
+exclusion['url'] = 'exclusion'
+exclusion['soft_delete'] = True
+exclusion['datasource']['source'] = 'contacts'
+exclusion['datasource']['projection'] = {'int': 0}
+
 DOMAIN = {
     'disabled_bulk': disabled_bulk,
     'contacts': contacts,
@@ -318,5 +327,6 @@ DOMAIN = {
     'ids': ids,
     'login': login,
     'products': products,
-    'child_products': child_products
+    'child_products': child_products,
+    'exclusion': exclusion,
 }

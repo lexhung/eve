@@ -328,9 +328,20 @@ def serialize(document, resource=None, schema=None, fields=None):
         if not fields:
             fields = document.keys()
         for field in fields:
+            if document[field] is None:
+                continue
             if field in schema:
                 field_schema = schema[field]
                 field_type = field_schema.get('type')
+                if field_type is None:
+                    for x_of in ['allof', 'anyof', 'oneof', 'noneof']:
+                        for optschema in field_schema.get(x_of, []):
+                            schema = {field: optschema}
+                            serialize(document, schema=schema)
+                        x_of_type = '{0}_type'.format(x_of)
+                        for opttype in field_schema.get(x_of_type, []):
+                            schema = {field: {'type': opttype}}
+                            serialize(document, schema=schema)
                 if 'schema' in field_schema:
                     field_schema = field_schema['schema']
                     if 'dict' in (field_type, field_schema.get('type')):
@@ -341,7 +352,7 @@ def serialize(document, resource=None, schema=None, fields=None):
                             if type(subdocument) is not dict:
                                 # value is not a dict - continue serialization
                                 # error will be reported by validation if
-                                # appropriate (could be allowed nullable dict)
+                                # appropriate
                                 continue
                             elif 'schema' in field_schema:
                                 serialize(subdocument,
@@ -389,7 +400,7 @@ def serialize(document, resource=None, schema=None, fields=None):
                     try:
                         document[field] = \
                             app.data.serializers[field_type](document[field])
-                    except (ValueError, InvalidId):
+                    except (ValueError, TypeError, InvalidId):
                         # value can't be casted, we continue processing the
                         # rest of the document. Validation will later report
                         # back the issue.
@@ -1040,7 +1051,7 @@ def oplog_push(resource, document, op, id=None):
             # https://stackoverflow.com/questions/22868900/how-do-i-safely-get-the-users-real-ip-address-in-flask-using-mod-wsgi
             entry['ip'] = request.remote_addr
 
-            if op in ('PATCH', 'PUT', 'DELETE'):
+            if op in config.OPLOG_CHANGE_METHODS:
                 # these fields are already contained in 'entry'.
                 del(update[config.LAST_UPDATED])
                 # legacy documents (v0.4 or less) could be missing the etag

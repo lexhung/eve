@@ -6,10 +6,35 @@ Here you can see the full list of changes between each Eve release.
 In Development
 --------------
 
+Version 0.6.2
+~~~~~~~~~~~~~
+
+- New: Query parameters not recognised by Eve are now returned in HATEOAS URLs
+  (Mugur Rus).
+- New: ``OPLOG_CHANGE_METHODS`` is a list of HTTP methods which operations will
+  include changes into the OpLog (mmizotin).
+
+- Fix: Serialize inside ``of`` and ``of_type`` rules new in Cerberus 0.9. Closes #692
+  (Arnau Orriols).
+- Fix: In ``patch_internal`` Validator is not se twhen ``skip_validation`` is
+  ``true`` (Stratos Gerakakis).
+- Fix: Skip any null value from serialization (Arnau Orriols).
+- Fix: When ``SOFT_DELETE`` is active an exclusive ``datasource.projection``
+  causes a ``500`` error. Closes #752.
+
+- Update: PyMongo 3.1 is now required.
+- Update: Flask-PyMongo 0.4+ is now required.
+
+- Docs: fix some typos (Manquer, Patrick Decat).
+
+
+Stable
+------
+
 Version 0.6.1
 ~~~~~~~~~~~~~
 
-Not released.
+Released on 29 October, 2015
 
 - New: ``BULK_ENABLED`` enables/disables bulk insert. Defaults to ``True``
   (Julian Hille).
@@ -45,8 +70,6 @@ Not released.
 - Docs: add Eve-Swagger to Extensions page.
 - Docs: fix broken link to Mongo's capped collections (Nathan Reynolds).
 
-Stable
-------
 
 Version 0.6
 ~~~~~~~~~~~
