@@ -270,7 +270,7 @@ class Mongo(DataLayer):
         for jfield in request.args.getlist('ijoin'):
             joins.append((jfield, 'inner', False))
 
-        for jfield in request.args.getlist('uijoin'):
+        for jfield in request.args.getlist('iujoin'):
             joins.append((jfield, 'inner', True))
 
         joins = map(lambda j: (j, junctions[j[0]]), filter(lambda j: j[0] in junctions, joins))
@@ -328,10 +328,10 @@ class Mongo(DataLayer):
 
             fquery = 'filter_{}'.format(jfield)
 
+            rfield = '$'+jfield
             if fquery in request.args:
                 _where = request.args[fquery]
                 parsed_filter = self.parse_filter_query(_where)
-                rfield = '$'+jfield
 
                 _args['projection'][0].update({
                     jfield: {
@@ -343,35 +343,40 @@ class Mongo(DataLayer):
                     }
                 })
 
-                if unwind:
-                    _args['unwind'].append({
-                        'path': rfield,
-                        'preserveNullAndEmptyArrays': jtype != 'inner'
-                    })
-                elif jtype == 'inner':
+                if jtype == 'inner':
                     if len(_args['joined_match']) == 0:
                         _args['joined_match'] = [{}]
 
                     _args['joined_match'][0].update({
                         jfield: {'$not': {'$size': 0}}
                     })
+            else:
+                _args['projection'][0].update({
+                    jfield: 1
+                })
+
+            if unwind:
+                _args['unwind'].append({
+                    'path': rfield,
+                    'preserveNullAndEmptyArrays': jtype == 'outer'
+                })
 
         pipeline = []
-        count_pipe = []
+        counter_pipeline = []
         for stage, key in aggregation_stages:
             for param in _args[key]:
                 op = {stage: param}
                 pipeline.append(op)
 
                 if not key in ['limit', 'skip']:
-                    count_pipe.append(op)
+                    counter_pipeline.append(op)
 
         if config.DEBUG:
             print 'PIPELINE:', json.dumps(pipeline, indent=2, cls=MongoJSONEncoder)
 
         def _aggregation_count(*_, **kwargs):
             try:
-                counter = resource_collection.aggregate(count_pipe + [{
+                counter = resource_collection.aggregate(counter_pipeline + [{
                     '$group': {
                         '_id': None,
                         'count': {'$sum': 1}
