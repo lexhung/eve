@@ -342,17 +342,18 @@ class Mongo(DataLayer):
                         }
                     }
                 })
-
-                if jtype == 'inner':
-                    if len(_args['joined_match']) == 0:
-                        _args['joined_match'] = [{}]
-
-                    _args['joined_match'][0].update({
-                        jfield: {'$not': {'$size': 0}}
-                    })
             else:
                 _args['projection'][0].update({
                     jfield: 1
+                })
+
+
+            if jtype == 'inner':
+                if len(_args['joined_match']) == 0:
+                    _args['joined_match'] = [{}]
+
+                _args['joined_match'][0].update({
+                    jfield: {'$not': {'$size': 0}}
                 })
 
             if unwind:
