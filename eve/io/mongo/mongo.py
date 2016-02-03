@@ -251,7 +251,7 @@ class Mongo(DataLayer):
         joins = self.parse_joins(resource)
         if joins is not None and len(joins):
             resource_collection = self.pymongo(resource).db[datasource]
-            return self.find_with_aggregation(resource_collection, args, joins)
+            return self.find_with_aggregation(resource, resource_collection, args, joins)
 
         return self.pymongo(resource).db[datasource].find(**args)
 
@@ -281,7 +281,7 @@ class Mongo(DataLayer):
     def parse_filter_query(self, where):
         try:
             spec = self._sanitize(json.loads(where))
-        except HTTPException as e:
+        except HTTPException:
             # _sanitize() is raising an HTTP exception; let it fire.
             raise
         except:
@@ -293,7 +293,7 @@ class Mongo(DataLayer):
         return spec
 
 
-    def find_with_aggregation(self, resource_collection, args, joins):
+    def find_with_aggregation(self, resource, resource_collection, args, joins):
         aggregation_stages  = [
             ('$match', 'filter'),
             ('$lookup', 'lookup'),
@@ -330,15 +330,17 @@ class Mongo(DataLayer):
 
             rfield = '$'+jfield
             if fquery in request.args:
-                _where = request.args[fquery]
-                parsed_filter = self.parse_filter_query(_where)
+                mfilter = request.args[fquery]
+                mfilter = self.parse_filter_query(mfilter)
+                mfilter = self._mongotize(mfilter, resource)
+                print "MFILTER:", mfilter
 
                 _args['projection'][0].update({
                     jfield: {
                         '$filter': {
                             'input': rfield,
                             'as': 'item',
-                            'cond': parsed_filter
+                            'cond': mfilter
                         }
                     }
                 })
