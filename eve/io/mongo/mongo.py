@@ -333,7 +333,6 @@ class Mongo(DataLayer):
                 mfilter = request.args[fquery]
                 mfilter = self.parse_filter_query(mfilter)
                 mfilter = self._mongotize(mfilter, resource)
-                print "MFILTER:", mfilter
 
                 _args['projection'][0].update({
                     jfield: {
@@ -373,9 +372,6 @@ class Mongo(DataLayer):
 
                 if not key in ['limit', 'skip']:
                     counter_pipeline.append(op)
-
-        if config.DEBUG:
-            print 'PIPELINE:', json.dumps(pipeline, indent=2, cls=MongoJSONEncoder)
 
         def _aggregation_count(*_, **kwargs):
             try:
@@ -878,17 +874,18 @@ class Mongo(DataLayer):
                 else:
                     return v
 
-        for k, v in source.items():
-            if isinstance(v, dict):
-                self._mongotize(v, resource)
-            elif isinstance(v, list):
-                for i, v1 in enumerate(v):
-                    if isinstance(v1, dict):
-                        source[k][i] = self._mongotize(v1, resource)
-                    else:
-                        source[k][i] = try_cast(v1)
-            elif isinstance(v, str_type):
-                source[k] = try_cast(v)
+        if isinstance(source, dict):
+            for k, v in source.items():
+                if isinstance(v, (dict, list)):
+                    self._mongotize(v, resource)
+                elif isinstance(v, str_type):
+                    source[k] = try_cast(v)
+        elif isinstance(source, list):
+            for i, v in enumerate(source):
+                if isinstance(v, (dict, list)):
+                    source[i] = self._mongotize(v, resource)
+                else:
+                    source[i] = try_cast(v)
 
         return source
 
