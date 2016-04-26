@@ -13,6 +13,7 @@
 """
 from bson import tz_util
 from flask import abort, request, current_app as app, Response
+from itsdangerous import TimestampSigner
 
 from eve.auth import requires_auth, resource_auth
 from eve.methods import get, getitem, post, patch, delete, deleteitem, put
@@ -174,6 +175,12 @@ def media_endpoint(_id, filename=None):
 
     .. versionadded:: 0.6
     """
+    try:
+        signer = TimestampSigner(config.SECRET_KEY)
+        _id, uid = signer.unsign(_id, max_age=600).split('.')
+    except:
+        abort(404)
+
     file_ = app.media.get(_id)
     if file_ is None:
         return abort(404)

@@ -192,7 +192,7 @@ EXTENDED_MEDIA_INFO = []
 RETURN_MEDIA_AS_BASE64_STRING = True
 RETURN_MEDIA_AS_URL = False
 MEDIA_ENDPOINT = 'media'
-MEDIA_URL = 'regex("[a-f0-9]{24}")'
+MEDIA_URL = 'regex("[a-f0-9]{24}\.[a-zA-Z0-9_\-\.]+")'
 MEDIA_BASE_URL = None
 MEDIA_DOWNLOAD = '_download'
 

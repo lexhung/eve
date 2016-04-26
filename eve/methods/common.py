@@ -18,6 +18,7 @@ from bson.errors import InvalidId
 from copy import copy
 from flask import current_app as app, request, abort, g, Response
 from functools import wraps
+from itsdangerous import TimestampSigner
 
 from eve.utils import parse_request, document_etag, config, \
     debug_error_message, auto_fields
@@ -546,7 +547,6 @@ def field_definition(resource, chained_fields):
             pass
     return definition
 
-
 def resolve_embedded_fields(resource, req):
     """ Returns a list of validated embedded fields from the incoming request
     or from the resource definition is the request does not specify.
@@ -726,6 +726,12 @@ def resolve_media_files(document, resource):
 
     .. versionadded:: 0.4
     """
+    signer = TimestampSigner(config.SECRET_KEY)
+    try:
+        uid = g.uid
+    except:
+        uid = '_'
+
     for field in resource_media_fields(document, resource):
         file_id = document[field]
         _file = app.media.get(file_id, resource)
@@ -738,8 +744,10 @@ def resolve_media_files(document, resource):
             elif config.RETURN_MEDIA_AS_URL:
                 prefix = config.MEDIA_BASE_URL if config.MEDIA_BASE_URL \
                     is not None else app.api_prefix
+
+                signed_file_id = signer.sign(str(file_id) + '.' + str(uid))
                 ret_file = '%s/%s/%s' % (prefix, config.MEDIA_ENDPOINT,
-                                         file_id)
+                                         signed_file_id)
             else:
                 ret_file = None
 
