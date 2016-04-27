@@ -6,7 +6,7 @@
 
     Implements proper, automated rendering for Eve responses.
 
-    :copyright: (c) 2015 by Nicola Iarocci.
+    :copyright: (c) 2016 by Nicola Iarocci.
     :license: BSD, see LICENSE for more details.
 """
 
@@ -107,6 +107,9 @@ def _prepare_response(resource, dct, last_modified=None, etag=None,
     :param etag: ETag header value.
     :param status: response status.
 
+    .. versionchanged:: 0.7
+       ETag value now surrounded by double quotes. Closes #794.
+
     .. versionchanged:: 0.6
        JSONP Support.
 
@@ -176,7 +179,7 @@ def _prepare_response(resource, dct, last_modified=None, etag=None,
 
     # etag and last-modified
     if etag:
-        resp.headers.add('ETag', etag)
+        resp.headers.add('ETag', '"' + etag + '"')
     if last_modified:
         resp.headers.add('Last-Modified', date_to_rfc1123(last_modified))
 
@@ -219,7 +222,7 @@ def _prepare_response(resource, dct, last_modified=None, etag=None,
         resp.headers.add('Access-Control-Expose-Headers',
                          ', '.join(expose_headers))
         resp.headers.add('Access-Control-Allow-Methods', methods)
-        resp.headers.add('Access-Control-Allow-Max-Age', config.X_MAX_AGE)
+        resp.headers.add('Access-Control-Max-Age', config.X_MAX_AGE)
         if allow_credentials:
             resp.headers.add('Access-Control-Allow-Credentials', "true")
 

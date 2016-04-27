@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
-
-from unittest import TestCase
-from bson import ObjectId
 from datetime import datetime
+
+import simplejson as json
+from bson import ObjectId
+from bson.dbref import DBRef
 from cerberus import SchemaError
-from eve.io.mongo.parser import parse, ParseError
+from unittest import TestCase
+
 from eve.io.mongo import Validator, Mongo, MongoJSONEncoder
+from eve.io.mongo.parser import parse, ParseError
 from eve.tests import TestBase
 from eve.tests.test_settings import MONGO_DBNAME
-import simplejson as json
 
 
 class TestPythonParser(TestCase):
@@ -103,6 +105,21 @@ class TestMongoValidator(TestCase):
     def test_objectid_success(self):
         schema = {'id': {'type': 'objectid'}}
         doc = {'id': ObjectId('50656e4538345b39dd0414f0')}
+        v = Validator(schema, None)
+        self.assertTrue(v.validate(doc))
+
+    def test_dbref_fail(self):
+        schema = {'id': {'type': 'dbref'}}
+        doc = {'id': 'not_an_object_id'}
+        v = Validator(schema, None)
+        self.assertFalse(v.validate(doc))
+        self.assertTrue('id' in v.errors)
+        self.assertTrue('DBRef' in v.errors['id'])
+
+    def test_dbref_success(self):
+        schema = {'id': {'type': 'dbref'}}
+        doc = {'id': DBRef("SomeCollection",
+                           ObjectId("50656e4538345b39dd0414f0"))}
         v = Validator(schema, None)
         self.assertTrue(v.validate(doc))
 
@@ -294,30 +311,6 @@ class TestMongoValidator(TestCase):
         schema['test_field'] = {'dependencies': ['foo', 'bar']}
         v = Validator(schema)
         self.assertTrue(v.validate(doc))
-
-    def test_removal_of_unnecessary_unique_constraints(self):
-        schema = {
-            '_id': {
-                'type': 'objectid',
-                'unique': True
-            },
-            'foo': {
-                'type': 'string',
-                'minlength': 2
-            }
-        }
-        expected_schema = {
-            '_id': {
-                'type': 'objectid'
-            },
-            'foo': {
-                'type': 'string',
-                'minlength': 2
-            }
-        }
-        v = Validator(schema)
-        schema = v._remove_unique_rules_on_fields_with_unique_index(schema)
-        self.assertEqual(expected_schema, schema)
 
 
 class TestMongoDriver(TestBase):

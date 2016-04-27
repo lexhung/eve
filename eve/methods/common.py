@@ -6,7 +6,7 @@
 
     Utility functions for API methods implementations.
 
-    :copyright: (c) 2015 by Nicola Iarocci.
+    :copyright: (c) 2016 by Nicola Iarocci.
     :license: BSD, see LICENSE for more details.
 """
 import time
@@ -15,6 +15,7 @@ from datetime import datetime
 import base64
 import simplejson as json
 from bson.errors import InvalidId
+from bson.dbref import DBRef
 from copy import copy
 from flask import current_app as app, request, abort, g, Response
 from functools import wraps
@@ -63,8 +64,8 @@ def get_document(resource, concurrency_check, **lookup):
         if not req.if_match and config.IF_MATCH and concurrency_check:
             # we don't allow editing unless the client provides an etag
             # for the document
-            abort(403, description='An etag must be provided to edit a '
-                  'document')
+            abort(428, description='To edit a document '
+                  'its etag must be provided using the If-Match header')
 
         # ensure the retrieved document has LAST_UPDATED and DATE_CREATED,
         # eventually with same default values as in GET.
@@ -127,6 +128,10 @@ def payload():
     then returns the request payload as a dict. If request Content-Type is
     unsupported, aborts with a 400 (Bad Request).
 
+    .. versionchanged:: 0.7
+       Allow 'multipart/form-data' form fields to be JSON encoded, once the
+       MULTIPART_FORM_FIELDS_AS_JSON setting was been set.
+
     .. versionchanged:: 0.3
        Allow 'multipart/form-data' content type.
 
@@ -159,10 +164,25 @@ def payload():
             # merge form fields and request files, so we get a single payload
             # to be validated against the resource schema.
 
-            # list() is needed because Python3 items() returns a dict_view, not
-            # a list as in Python2.
-            return dict(list(request.form.to_dict().items()) +
-                        list(request.files.to_dict().items()))
+            if config.MULTIPART_FORM_FIELDS_AS_JSON:
+
+                formItems = dict(list(request.form.to_dict().items()))
+
+                for key in formItems.keys():
+                    try:
+                        formItems[key] = json.loads(formItems[key])
+                    except ValueError:
+                        formItems[key] = json.loads(
+                            '"{0}"'.format(formItems[key]))
+
+                return dict(list(formItems.items()) +
+                            list(request.files.to_dict().items()))
+            else:
+                # list() is needed because Python3 items() returns a
+                # dict_view, not a list as in Python2.
+                return dict(list(request.form.to_dict().items()) +
+                            list(request.files.to_dict().items()))
+
         else:
             abort(400, description='No multipart/form-data supplied')
     else:
@@ -370,15 +390,14 @@ def serialize(document, resource=None, schema=None, fields=None):
                                     serialize(sublist[i],
                                               schema=sublist_schema['schema'])
                                 elif item_type in app.data.serializers:
-                                        sublist[i] = \
-                                            app.data.serializers[item_type](v)
+                                    sublist[i] = serialize_value(item_type, v)
                     else:
                         # a list of one type, arbitrary length
                         field_type = field_schema.get('type')
                         if field_type in app.data.serializers:
                             for i, v in enumerate(document[field]):
                                 document[field][i] = \
-                                    app.data.serializers[field_type](v)
+                                    serialize_value(field_type, v)
                 elif 'items' in field_schema:
                     # a list of multiple types, fixed length
                     for i, (s, v) in enumerate(zip(field_schema['items'],
@@ -386,8 +405,7 @@ def serialize(document, resource=None, schema=None, fields=None):
                         field_type = s.get('type')
                         if field_type in app.data.serializers:
                             document[field][i] = \
-                                app.data.serializers[field_type](
-                                    document[field][i])
+                                serialize_value(field_type, document[field][i])
                 elif 'valueschema' in field_schema:
                     # a valueschema
                     field_type = field_schema['valueschema']['type']
@@ -395,18 +413,25 @@ def serialize(document, resource=None, schema=None, fields=None):
                         target = document[field]
                         for field in target:
                             target[field] = \
-                                app.data.serializers[field_type](target[field])
+                                serialize_value(field_type, target[field])
                 elif field_type in app.data.serializers:
                     # a simple field
-                    try:
-                        document[field] = \
-                            app.data.serializers[field_type](document[field])
-                    except (ValueError, TypeError, InvalidId):
-                        # value can't be casted, we continue processing the
-                        # rest of the document. Validation will later report
-                        # back the issue.
-                        pass
+                    document[field] = \
+                        serialize_value(field_type, document[field])
+
     return document
+
+
+def serialize_value(field_type, value):
+    """Serialize value of a given type. Relies on the app.data.serializers
+    dictionary.
+    """
+    try:
+        return app.data.serializers[field_type](value)
+    except (KeyError, ValueError, TypeError, InvalidId):
+        # value can't be cast or no serializer defined, return as is and
+        # validation will later report back the issue.
+        return value
 
 
 def normalize_dotted_fields(document):
@@ -632,10 +657,14 @@ def embedded_document(reference, data_relation, field_name):
         build_response_document(embedded_doc, data_relation['resource'],
                                 [], latest_embedded_doc)
     else:
-        subresource = data_relation['resource']
+        # if reference is DBRef take the referenced collection as subresource
+        subresource = reference.collection if isinstance(reference, DBRef) \
+            else data_relation['resource']
         id_field = config.DOMAIN[subresource]['id_field']
         embedded_doc = app.data.find_one(subresource, None,
-                                         **{id_field: reference})
+                                         **{id_field: reference.id
+                                            if isinstance(reference, DBRef)
+                                            else reference})
         if embedded_doc:
             resolve_media_files(embedded_doc, subresource)
 
@@ -1020,6 +1049,11 @@ def oplog_push(resource, document, op, id=None):
     :param op: operation performed. Can be 'POST', 'PUT', 'PATCH', 'DELETE'.
     :param id: unique id of the document.
 
+    .. versionchanged:: 0.7
+       Add user information to the audit. Closes #846.
+       Raise on_oplog_push event.
+       Add support for 'extra' custom field.
+
     .. versionchanged:: 0.5.4
        Use a copy of original document in order to avoid altering its state.
        See #590.
@@ -1053,11 +1087,10 @@ def oplog_push(resource, document, op, id=None):
             last_update = datetime.utcnow().replace(microsecond=0)
         entry[config.LAST_UPDATED] = entry[config.DATE_CREATED] = last_update
         if config.OPLOG_AUDIT:
-
-            # TODO this needs further investigation. See:
-            # http://esd.io/blog/flask-apps-heroku-real-ip-spoofing.html;
-            # https://stackoverflow.com/questions/22868900/how-do-i-safely-get-the-users-real-ip-address-in-flask-using-mod-wsgi
             entry['ip'] = request.remote_addr
+
+            auth = resource_def['authentication']
+            entry['u'] = auth.get_user_or_token() if auth else 'n/a'
 
             if op in config.OPLOG_CHANGE_METHODS:
                 # these fields are already contained in 'entry'.
@@ -1075,4 +1108,7 @@ def oplog_push(resource, document, op, id=None):
         entries.append(entry)
 
     if entries:
+        # notify callbacks
+        getattr(app, "on_oplog_push")(resource, entries)
+        # oplog push
         app.data.insert(config.OPLOG_NAME, entries)

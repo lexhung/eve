@@ -7,12 +7,16 @@
     This module implements the API 'GET' methods, supported by both the
     resources and single item endpoints.
 
-    :copyright: (c) 2015 by Nicola Iarocci.
+    :copyright: (c) 2016 by Nicola Iarocci.
     :license: BSD, see LICENSE for more details.
 """
 import math
-from werkzeug import MultiDict
+
+import copy
+import json
 from flask import current_app as app, abort, request
+from werkzeug import MultiDict
+
 from .common import ratelimit, epoch, pre_event, resolve_embedded_fields, \
     build_response_document, resource_link, document_link, last_updated
 from eve.auth import requires_auth
@@ -25,6 +29,17 @@ from eve.versioning import synthesize_versioned_document, versioned_id_field, \
 @requires_auth('resource')
 @pre_event
 def get(resource, **lookup):
+    """
+    Default function for handling GET requests, it has decorators for
+    rate limiting, authentication and for raising pre-request events. After the
+    decorators are applied forwards to call to :func:`get_internal`
+
+    .. versionadded:: 0.6.2
+    """
+    return get_internal(resource, **lookup)
+
+
+def get_internal(resource, **lookup):
     """ Retrieves the resource documents that match the current request.
 
     :param resource: the name of the resource.
@@ -87,6 +102,73 @@ def get(resource, **lookup):
        JSON formatted.
     """
 
+    datasource = config.DOMAIN[resource]['datasource']
+    aggregation = datasource.get('aggregation')
+
+    if aggregation:
+        return _perform_aggregation(resource, aggregation['pipeline'],
+                                    aggregation['options'])
+    else:
+        return _perform_find(resource, lookup)
+
+
+def _perform_aggregation(resource, pipeline, options):
+    """
+    .. versionadded:: 0.7
+    """
+    # TODO move most of this down to the Mongo layer?
+
+    # TODO experiment with cursor.batch_size as alternative pagination
+    # implementation
+
+    def parse_aggregation_stage(d, key, value):
+        for st_key, st_value in d.items():
+            if isinstance(st_value, dict):
+                parse_aggregation_stage(st_value, key, value)
+            if key == st_value:
+                d[st_key] = value
+
+    response = {}
+    documents = []
+    req = parse_request(resource)
+
+    req_pipeline = copy.deepcopy(pipeline)
+    if req.aggregation:
+        try:
+            query = json.loads(req.aggregation)
+        except ValueError:
+            abort(400, description='Aggregation query could not be parsed.')
+
+        for key, value in query.items():
+            if key[0] != '$':
+                pass
+            for stage in req_pipeline:
+                parse_aggregation_stage(stage, key, value)
+
+    if req.max_results > 1:
+        limit = {"$limit": req.max_results}
+        skip = {"$skip": (req.page - 1) * req.max_results}
+        req_pipeline.append(skip)
+        req_pipeline.append(limit)
+
+    cursor = app.data.aggregate(resource, req_pipeline, options)
+
+    for document in cursor:
+        documents.append(document)
+
+    response[config.ITEMS] = documents
+
+    # PyMongo's CommandCursor does not return a count, so we cannot
+    # provide paination/total count info as we do with a normal (non-aggregate)
+    # GET request.
+
+    return response, None, None, 200, []
+
+
+def _perform_find(resource, lookup):
+    """
+    .. versionadded:: 0.7
+    """
     documents = []
     response = {}
     etag = None
@@ -151,6 +233,18 @@ def get(resource, **lookup):
 @requires_auth('item')
 @pre_event
 def getitem(resource, **lookup):
+    """
+    Default function for handling GET requests to document endpoints, it has
+    decorators for rate limiting, authentication and for raising pre-request
+    events. After the decorators are applied forwards to call to
+    :func:`getitem_internal`
+
+    .. versionadded:: 0.6.2
+    """
+    return getitem_internal(resource, **lookup)
+
+
+def getitem_internal(resource, **lookup):
     """
     :param resource: the name of the resource to which the document belongs.
     :param **lookup: the lookup query.
@@ -240,6 +334,13 @@ def getitem(resource, **lookup):
     build_response_document(document, resource, embedded_fields, latest_doc)
     if config.IF_MATCH:
         etag = document[config.ETAG]
+        if resource_def['versioning'] is True:
+            # In order to keep the LATEST_VERSION field up to date in client
+            # caches, changes to the latest version should invalidate cached
+            # copies of previous verisons. Incorporate the latest version into
+            # versioned document ETags on the fly to ensure 'If-None-Match'
+            # comparisons support this caching behavior.
+            etag += str(document[config.LATEST_VERSION])
 
     # check embedded fields resolved in build_response_document() for more
     # recent last updated timestamps. We don't want to respond 304 if embedded
@@ -257,11 +358,8 @@ def getitem(resource, **lookup):
         cache_valid = (last_modified <= req.if_modified_since)
         cache_validators[cache_valid] += 1
     if req.if_none_match:
-        if (resource_def['versioning'] is False) or \
-           (document[app.config['VERSION']] ==
-                document[app.config['LATEST_VERSION']]):
-            cache_valid = (etag == req.if_none_match)
-            cache_validators[cache_valid] += 1
+        cache_valid = (etag == req.if_none_match)
+        cache_validators[cache_valid] += 1
     # If all cache validators are true, return 304
     if (cache_validators[True] > 0) and (cache_validators[False] == 0):
         return {}, last_modified, etag, 304

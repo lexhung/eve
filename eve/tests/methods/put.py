@@ -1,4 +1,5 @@
 from bson import ObjectId
+from bson.dbref import DBRef
 import simplejson as json
 
 from eve.tests import TestBase
@@ -25,7 +26,7 @@ class TestPut(TestBase):
 
     def test_ifmatch_missing(self):
         _, status = self.put(self.item_id_url, data={'key1': 'value1'})
-        self.assert403(status)
+        self.assert428(status)
 
     def test_ifmatch_disabled(self):
         self.app.config['IF_MATCH'] = False
@@ -205,6 +206,41 @@ class TestPut(TestBase):
         self.assertPutResponse(response, self.invoice_id, 'peopleinvoices')
         self.assertEqual(response.get('person'), str(fake_contact_id))
 
+    def test_put_dbref_subresource(self):
+        _db = self.connection[MONGO_DBNAME]
+        self.app.config['BANDWIDTH_SAVER'] = False
+
+        # create random contact
+        fake_contact = self.random_contacts(1)
+        fake_contact_id = _db.contacts.insert(fake_contact)[0]
+
+        # update first invoice to reference the new contact
+        _db.invoices.update({'_id': ObjectId(self.invoice_id)},
+                            {'$set': {
+                                'person': fake_contact_id,
+                                'persondbref':
+                                    DBRef("contacts",
+                                          ObjectId(fake_contact_id))}
+                             })
+
+        # GET all invoices by new contact
+        response, status = self.get('users/%s/invoices/%s' %
+                                    (fake_contact_id, self.invoice_id))
+
+        self.assertEqual(response.get('persondbref')['$id'],
+                         str(fake_contact_id))
+
+        etag = response[ETAG]
+
+        data = {"inv_number": "new_number"}
+        headers = [('If-Match', etag)]
+        response, status = self.put('users/%s/invoices/%s' %
+                                    (fake_contact_id, self.invoice_id),
+                                    data=data, headers=headers)
+
+        self.assert200(status)
+        self.assertPutResponse(response, self.invoice_id, 'peopleinvoices')
+
     def test_put_bandwidth_saver(self):
         changes = {'ref': '1234567890123456789012345'}
 
@@ -265,6 +301,19 @@ class TestPut(TestBase):
         self.assertEqual(db_value, test_value)
         self.assert200(status)
 
+    def test_put_internal_skip_validation(self):
+        # test that put_internal is available and working properly.
+        test_field = 'ref'
+        test_value = "9876543210987654321098765"
+        data = {test_field: test_value}
+        with self.app.test_request_context(self.item_id_url):
+            r, _, _, status = put_internal(
+                self.known_resource, data, concurrency_check=False,
+                skip_validation=True, **{'_id': self.item_id})
+        db_value = self.compare_put_with_get(test_field, r)
+        self.assertEqual(db_value, test_value)
+        self.assert200(status)
+
     def test_put_etag_header(self):
         # test that Etag is always includer with response header. See #562.
         changes = {"ref": "1234567890123456789012345"}
@@ -274,6 +323,12 @@ class TestPut(TestBase):
                                  data=json.dumps(changes),
                                  headers=headers)
         self.assertTrue('Etag' in r.headers)
+
+        # test that ETag is compliant to RFC 7232-2.3 and #794 is fixed.
+        etag = r.headers['ETag']
+
+        self.assertTrue(etag[0] == '"')
+        self.assertTrue(etag[-1] == '"')
 
     def test_put_nested(self):
         changes = {
@@ -362,7 +417,7 @@ class TestPut(TestBase):
         raw_r = self.test_client.get(self.item_id_url)
         r, status = self.parse_response(raw_r)
         self.assert200(status)
-        self.assertEqual(raw_r.headers.get('ETag'),
+        self.assertEqual(raw_r.headers.get('ETag').replace('"', ''),
                          put_response[ETAG])
         if isinstance(fields, str):
             return r[fields]

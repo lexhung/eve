@@ -8,8 +8,11 @@
     appropriately, by using a custom settings module (see the optional
     'settings' argument or the EVE_SETTING environment variable).
 
-    :copyright: (c) 2015 by Nicola Iarocci.
+    :copyright: (c) 2016 by Nicola Iarocci.
     :license: BSD, see LICENSE for more details.
+
+    .. versionchanged:: 0.7
+       'OPLOG_RETURN_EXTRA_FIELD' added and set to False.
 
     .. versionchanged:: 0.6
        'UPSERT_ON_PUT? added and set to True.
@@ -116,7 +119,7 @@ VALIDATION_ERROR_AS_LIST = False
 
 # codes for which we want to return a standard response which includes
 # a JSON body with the status, code, and description.
-STANDARD_ERRORS = [400, 401, 403, 404, 405, 406, 409, 410, 412, 422]
+STANDARD_ERRORS = [400, 401, 404, 405, 406, 409, 410, 412, 422, 428]
 
 # field returned on GET requests so we know if we have the latest copy even if
 # we access a specific version
@@ -169,6 +172,7 @@ OPLOG_METHODS = ['DELETE',
 OPLOG_CHANGE_METHODS = ['DELETE',
                         'PATCH',
                         'PUT']  # methods which write changes to the oplog
+OPLOG_RETURN_EXTRA_FIELD = False    # oplog does not return the 'extra' field.
 
 RESOURCE_METHODS = ['GET']
 ITEM_METHODS = ['GET']
@@ -196,6 +200,8 @@ MEDIA_URL = 'regex("[a-f0-9]{24}\.[a-zA-Z0-9_\-\.]+")'
 MEDIA_BASE_URL = None
 MEDIA_DOWNLOAD = '_download'
 
+MULTIPART_FORM_FIELDS_AS_JSON = False
+
 SCHEMA_ENDPOINT = None
 
 # list of extra fields to be included with every POST response. This list
@@ -211,6 +217,7 @@ QUERY_SORT = 'sort'
 QUERY_PAGE = 'page'
 QUERY_MAX_RESULTS = 'max_results'
 QUERY_EMBEDDED = 'embedded'
+QUERY_AGGREGATION = 'aggregate'
 
 HEADER_TOTAL_COUNT = 'X-Total-Count'
 

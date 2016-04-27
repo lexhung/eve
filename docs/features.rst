@@ -461,10 +461,10 @@ Consider the following workflow:
 .. code-block:: console
 
     $ curl -H "Content-Type: application/json" -X PATCH -i http://eve-demo.herokuapp.com/people/521d6840c437dc0002d1203c -d '{"firstname": "ronald"}'
-    HTTP/1.1 403 FORBIDDEN
+    HTTP/1.1 428 PRECONDITION REQUIRED
 
 We attempted an edit (``PATCH``), but we did not provide an ``ETag`` for the
-item so we got a ``403 FORBIDDEN`` back. Let's try again:
+item so we got a ``428 PRECONDITION REQUIRED`` back. Let's try again:
 
 .. code-block:: console
 
@@ -982,6 +982,14 @@ specified, or an empty request would be made to restore the document as is. The
 request must be made with proper authorization for write permission to the soft
 deleted document or it will be refused.
 
+Be aware that, should a previously soft deleted document be restored, there is
+a chance that an eventual unique field might end up being now duplicated in two
+different documents: the restored one, and another which might have been stored
+with the same field value while the original (now restored) was in 'deleted'
+state. This is because soft deleted documents are ignored when validating the
+`unique` rule for new or updated documents.
+
+
 Versioning
 ~~~~~~~~~~
 Soft deleting a versioned document creates a new version of that document with
@@ -1172,10 +1180,10 @@ Let's see an overview of what events are available:
 |       |        |      || ``def event(updates, original)``               |
 |       |        +------+-------------------------------------------------+
 |       |        |After || ``on_updated``                                 |
-|       |        |      || ``def event(resource_name, updated, original)``|
+|       |        |      || ``def event(resource_name, updates, original)``|
 |       |        |      +-------------------------------------------------+
 |       |        |      || ``on_updated_<resource_name>``                 |
-|       |        |      || ``def event(updated, original)``               |
+|       |        |      || ``def event(updates, original)``               |
 +-------+--------+------+-------------------------------------------------+
 |Delete |Item    |Before|| ``on_delete_item``                             |
 |       |        |      || ``def event(resource_name, item)``             |
@@ -1452,6 +1460,7 @@ With curl we would ``POST`` like this:
 
     $ curl -F "name=john" -F "pic=@profile.jpg" http://example.com/accounts
 
+
 For optimized performance files are stored in GridFS_ by default. Custom
 ``MediaStorage`` classes can be implemented and passed to the application to
 support alternative storage systems. A ``FileSystemMediaStorage`` class is in
@@ -1594,6 +1603,34 @@ response payloads by sending requests like this one:
 
     for details on the ``datasource`` setting.
     
+.. _multipart:
+
+Note on media files as ``multipart/data-form``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If you are uploading media files as ``multipart/data-form`` all the
+additional fields except the file fields will be treated as ``strings`` 
+for all field validation purposes.  If you have already defined some of
+the resource fields to be of different type (boolean, number, list etc)
+the validation rules for these fields would fail, preventing you to
+succesffully submit your resource.
+
+If you still want to be able to perform field validation in this case, you 
+will have to turn on ``MULTIPART_FORM_FIELDS_AS_JSON`` in your settings
+file in order to treat the incoming fields as JSON encoded strings and still
+be able to validate your fields.
+
+Please note, that in case you indeed turn on ``MULTIPART_FORM_FIELDS_AS_JSON``
+you will have to submit all resource fields as properly encoded JSON strings.
+
+For example a ``number`` should be submited as ``1234`` (as you would normally 
+expect). A ``boolean`` will have to be send as ``true`` (note the lowercase
+``t``). A ``list`` of strings as ``["abc", "xyz"]``. And finally
+a ``string``, which is the thing that will most likely trip, you will have
+to be submitted as ``"'abc'"`` (note that it is surrounded with double
+quotes). If ever in doubt if what you are submitting is a valid JSON string
+you can try passing it from the JSON Validator at http://jsonlint.com/ to
+be sure that it is correct.
+
 .. _geojson_feature:
 
 GeoJSON
@@ -1792,6 +1829,7 @@ Every oplog entry contains informations about the document and the operation:
 - Creation date
 - Resource endpoint URL
 - User token, if :ref:`user-restricted` is enabled for the endpoint
+- Optional custom data
 
 Like any other API-maintained document, oplog entries also expose:
 
@@ -1799,8 +1837,11 @@ Like any other API-maintained document, oplog entries also expose:
 - ETag
 - HATEOAS fields if that's enabled.
 
-If ``OPLOG_AUDIT`` is enabled entries also expose both client IP and changes
-applied to the document (for ``DELETE`` the whole document is included). 
+If ``OPLOG_AUDIT`` is enabled entries also expose:
+
+- client IP
+- Username or token, if available
+- changes applied to the document (for ``DELETE`` the whole document is included). 
 
 A typical oplog entry looks like this:
 
@@ -1812,6 +1853,7 @@ A typical oplog entry looks like this:
         "i": "542d118938345b614ea75b3c",
         "c": {...},
         "ip": "127.0.0.1",
+        "u": "admin",
         "_updated": "Fri, 03 Oct 2014 08:16:52 GMT", 
         "_created": "Fri, 03 Oct 2014 08:16:52 GMT",
         "_etag": "e17218fbca41cb0ee6a5a5933fb9ee4f4ca7e5d6"
@@ -1825,7 +1867,9 @@ To save a little space (at least on MongoDB) field names have been shortened:
 - ``r`` stands for resource endpoint
 - ``i`` stands for document id
 - ``ip`` is the client IP
+- ``u`` stands for user (or token) 
 - ``c`` stands for changes occurred 
+- ``extra`` is an optional field which you can use to store custom data
   
 ``_created`` and ``_updated`` are relative to the target document, which comes
 handy in a variety of scenarios (like when the oplog is available to clients,
@@ -1846,6 +1890,8 @@ Six settings are dedicated to the OpLog:
 - ``OPLOG_ENDPOINT`` is the endpoint name. Defaults to ``None``.
 - ``OPLOG_AUDIT`` if enabled, IP addresses and changes are also logged. Defaults to ``True``.
 - ``OPLOG_CHANGE_METHODS`` determines which methods will log changes. Defaults to ['PATCH', 'PUT', 'DELETE'].
+- ``OPLOG_RETURN_EXTRA_FIELD`` determines if the optional ``extra`` field
+  should be returned by the ``OPLOG_ENDPOINT``. Defaults to ``False``.
 
 As you can see the oplog feature is turned off by default. Also, since
 ``OPLOG_ENDPOINT`` defaults to ``None``, even if you switch the feature on no
@@ -1855,9 +1901,9 @@ endpoint name in order to expose your oplog to the public.
 The Oplog endpoint
 ~~~~~~~~~~~~~~~~~~
 Since the oplog endpoint is nothing but a standard API endpoint, you can
-customize it. This allows for setting up custom authentication
-(you might want this resource to be only accessible for administrative
-purposes) or any other useful setting. 
+customize it. This allows for setting up custom authentication (you might want
+this resource to be only accessible for administrative purposes) or any other
+useful setting. 
 
 Note that while you can change most of its settings, the endpoint will always
 be read-only so setting either ``resource_methods`` or ``item_methods`` to
@@ -1873,6 +1919,32 @@ since their last access. That’s a single request versus several. This is not
 always the best approach a client could take. Sometimes it is probably better
 to only query for changes on a certain endpoint. That's also possible, just
 query the oplog for changes occured on that endpoint.
+
+Extending Oplog entries
+~~~~~~~~~~~~~~~~~~~~~~~
+Every time the oplog is about to be updated the ``on_oplog_push`` event is fired.
+You can hook one or more callback functions to this event. Callbacks receive
+``resource`` and ``entries`` as arguments. The former is the resource name
+while the latter is a list of oplog entries which are about to be written to
+disk. 
+
+Your callback can add an optional ``extra`` field to canonical oplog entries.
+The field can be of any type. In this example we are adding a custom dict to
+each entry:
+
+.. code-block:: python
+
+    def oplog_extras(resource, entries):
+        for entry in entries:
+            entry['extra'] = {'myfield': 'myvalue'}
+
+    app = Eve()
+
+    app.on_oplog_push += oplog_extras
+    app.run()
+
+Please note that unless you explictly set ``OPLOG_RETURN_EXTRA_FIELD`` to
+``True``, the ``extra`` field will *not* be returned by the ``OPLOG_ENDPOINT``.
 
 .. note:: 
 
@@ -1892,6 +1964,101 @@ schema definitons, indexed by resource name. Resource visibility and
 authorization settings are honored, so internal resources or resources for
 which a request does not have read authentication will not be accessible at the
 schema endpoint. By default, ``SCHEMA_ENDPOINT`` is set to ``None``.
+
+.. _aggregation:
+
+MongoDB Aggregation Framework
+-----------------------------
+Support for the `MongoDB Aggregation Framework`_ is built-in. In the example
+below (taken from PyMongo) we’ll perform a simple aggregation to count the
+number of occurrences for each tag in the tags array, across the entire
+collection. To achieve this we need to pass in three operations to the
+pipeline. First, we need to unwind the tags array, then group by the tags and
+sum them up, finally we sort by count.
+
+As python dictionaries don’t maintain order you should use ``SON`` or
+collections ``OrderedDict`` where explicit ordering is required eg ``$sort``:
+
+::
+
+    posts = {
+        'datasource': {
+            'aggregation': {
+                'pipeline': [
+                    {"$unwind": "$tags"}, 
+                    {"$group": {"_id": "$tags", "count": {"$sum": 1}}}, 
+                    {"$sort": SON([("count", -1), ("_id", -1)])}
+                ]
+            }
+        }
+    }
+
+The pipeline above is static. You have the option to allow for dynamic
+pipelines, whereas the client will directly influence the aggregation results.
+Let's update the pipeline a little bit:
+
+::
+
+    posts = {
+        'datasource': {
+            'aggregation': {
+                'pipeline': [
+                    {"$unwind": "$tags"}, 
+                    {"$group": {"_id": "$tags", "count": {"$sum": "$value"}}}, 
+                    {"$sort": SON([("count", -1), ("_id", -1)])}
+                ]
+            }
+        }
+    }
+
+As you can see the `count` field is now going to sum the value of ``$value``,
+which will be set by the client upon perfoming the request:
+
+::
+
+    $ curl -i http://example.com/posts?aggregate={"$value": 2}
+
+The request above will cause the aggregation to be executed on the server with
+a `count` field configured as if it was a static ``{"$sum": 2}``. The client
+simply adds the ``aggregate`` query parameter and then passes a dictionary with
+field/value pairs. Like with all other keywords, you can change ``aggregate``
+to a keyword of your liking, just set ``QUERY_AGGREGATION`` in your settings. 
+
+You can also set all options natively supported by PyMongo. For more
+informations on aggregation see :ref:`datasource`.
+
+Limitations
+~~~~~~~~~~~
+``HATEOAS`` is not available at aggregation endpoints. This should not
+be surprising as documents returned by these endpoints are aggregation results
+and do not reside on the database, so there is no static link available for them. 
+
+Client pagination (``?page=2``) is enabled by default. This is currently
+achieved by injecting two additional stages (``$limit`` first, then ``$skip``)
+to the very end of the aggregation pipeline. You can turn pagination off by setting
+``pagination`` to ``False`` for the endpoint. Keep in mind that, when pagination
+is disabled, all aggregation results are included with every response.
+Disabling pagination might be appropriate (and actually advisable) only if the
+expected response payload is not huge.
+
+Client sorting (``?sort=field1``) is not supported at aggregation endpoints.
+You can of course add one or more ``$sort`` stages to the pipeline, as we did
+with the example above. If you do add a ``$sort`` stage to the pipeline,
+consider adding it at the end of the pipeline. According to MongoDB's ``$limit``
+documentation (link_):
+
+    When a ``$sort`` immediately precedes a ``$limit`` in the pipeline, the
+    sort operation only maintains the top **n** results as it progresses, where
+    **n** is the specified limit, and MongoDB only needs to store **n** items
+    in memory. 
+
+As we just saw earlier, pagination adds a ``$limit`` stage to the end of the
+pipeline. So if pagination is enabled and ``$sort`` is the last stage of your
+pipeline, then the resulting combined pipeline should be optimized.
+
+A single endpoint cannot serve both regular and aggregation results. However,
+since it is possible to setup multiple endpoints all serving from the same
+datasource (see :ref:`source`), similar functionality can be easily achieved.
 
 MongoDB and SQL Support
 ------------------------
@@ -1933,3 +2100,5 @@ for unittesting_ and an `extensive documentation`_.
 .. _`extensions page`: http://python-eve.org/extensions
 .. _source: http://en.wikipedia.org/wiki/JSONP
 .. _`LogRecord attributes`: https://docs.python.org/2/library/logging.html#logrecord-attributes 
+.. _`MongoDB Aggregation Framework`: https://docs.mongodb.org/v3.0/applications/aggregation/
+.. _link: https://docs.mongodb.org/manual/reference/operator/aggregation/limit/

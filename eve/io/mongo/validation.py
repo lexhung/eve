@@ -8,11 +8,12 @@
     objects incoming via POST/PATCH requests conform to the API domain.
     An extension of Cerberus Validator.
 
-    :copyright: (c) 2015 by Nicola Iarocci.
+    :copyright: (c) 2016 by Nicola Iarocci.
     :license: BSD, see LICENSE for more details.
 """
 import copy
 from bson import ObjectId
+from bson.dbref import DBRef
 from collections import Mapping
 from flask import current_app as app
 from werkzeug.datastructures import FileStorage
@@ -56,7 +57,7 @@ class Validator(Validator):
         self.resource = resource
         self._id = None
         self._original_document = None
-        schema = self._remove_unique_rules_on_fields_with_unique_index(schema)
+
         if resource:
             transparent_schema_rules = \
                 config.DOMAIN[resource]['transparent_schema_rules']
@@ -65,16 +66,6 @@ class Validator(Validator):
             schema,
             transparent_schema_rules=transparent_schema_rules,
             allow_unknown=allow_unknown)
-
-    def _remove_unique_rules_on_fields_with_unique_index(self, schema):
-        # TODO: Actually do what the function name suggests. This version just
-        # removes the unique constraint on _id. We could use the information
-        # available by app.data.driver.db[datasource].index_information() to
-        # remove all unnecessary unique constraints.
-        result = copy.deepcopy(schema)
-        if '_id' in result and 'unique' in result['_id']:
-            del(result['_id']['unique'])
-        return result
 
     def validate_update(self, document, _id, original_document=None):
         """ Validate method to be invoked when performing an update, not an
@@ -156,14 +147,34 @@ class Validator(Validator):
     def _is_value_unique(self, unique, field, value, query):
         """ Validates that a field value is unique.
 
+        .. versionchanged:: 0.6.2
+           Exclude soft deleted documents from uniqueness check. Closes #831.
+
         .. versionadded:: 0.6
         """
         if unique:
             query[field] = value
 
+            resource_config = config.DOMAIN[self.resource]
+
+            # exclude soft deleted documents if applicable
+            if resource_config['soft_delete']:
+                # be aware that, should a previously (soft) deleted document be
+                # restored, and because we explicitly ignore soft deleted
+                # documents while validating 'unique' fields, there is a chance
+                # that a unique field value will end up being now duplicated
+                # in two documents: the restored one, and the one which has
+                # been stored with the same field value while the original
+                # document was in 'deleted' state.
+
+                # we make sure to also include documents which are missing the
+                # DELETED field. This happens when soft deletes are enabled on
+                # an a resource with existing documents.
+                query[config.DELETED] = {'$ne': True}
+
             # exclude current document
             if self._id:
-                id_field = config.DOMAIN[self.resource]['id_field']
+                id_field = resource_config['id_field']
                 query[id_field] = {'$ne': self._id}
 
             # we perform the check on the native mongo driver (and not on
@@ -234,13 +245,15 @@ class Validator(Validator):
 
             data_resource = data_relation['resource']
             for item in value:
-                    query = {data_relation['field']: item}
+                    query = {data_relation['field']: item.id
+                             if isinstance(item, DBRef) else item}
                     if not app.data.find_one(data_resource, None, **query):
                         self._error(
                             field,
                             "value '%s' must exist in resource"
                             " '%s', field '%s'." %
-                            (item, data_resource, data_relation['field']))
+                            (item.id if isinstance(item, DBRef) else item,
+                             data_resource, data_relation['field']))
 
     def _validate_type_objectid(self, field, value):
         """ Enables validation for `objectid` data type.
@@ -257,6 +270,17 @@ class Validator(Validator):
         """
         if not isinstance(value, ObjectId):
             self._error(field, "value '%s' cannot be converted to a ObjectId"
+                        % value)
+
+    def _validate_type_dbref(self, field, value):
+        """ Enables validation for `DBRef` data type.
+
+        :param field: field name.
+        :param value: field value.
+
+        """
+        if not isinstance(value, DBRef):
+            self._error(field, "value '%s' cannot be converted to a DBRef"
                         % value)
 
     def _validate_readonly(self, read_only, field, value):

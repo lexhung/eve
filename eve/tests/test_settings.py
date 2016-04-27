@@ -170,7 +170,11 @@ invoices = {
         'invoicing_contacts': {
             'type': 'list',
             'data_relation': {'resource': 'contacts'}
-        }
+        },
+        'persondbref': {
+            'type': 'dbref',
+            'data_relation': {'resource': 'contacts'}
+        },
     }
 }
 
@@ -284,8 +288,7 @@ products = {
     'schema': {
         'sku': {
             'type': 'string',
-            'maxlength': 16,
-            'unique': True
+            'maxlength': 16
         },
         'title': {
             'type': 'string',
