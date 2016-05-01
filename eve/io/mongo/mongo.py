@@ -309,7 +309,7 @@ class Mongo(DataLayer):
         return spec
 
 
-    def find_with_aggregation(self, resource, resource_collection, args, joins):
+    def find_with_aggregation(self, resource, resource_collection, find_args, joins):
         aggregation_stages  = [
             ('$match', 'filter'),
             ('$lookup', 'lookup'),
@@ -322,20 +322,20 @@ class Mongo(DataLayer):
             ('$group', 'group')
         ]
 
-        if 'sort' in args:
+        if 'sort' in find_args:
             from bson.son import SON
-            args['sort'] = SON(args['sort'])
+            find_args['sort'] = SON(find_args['sort'])
 
-        _args = {}
+        aggregate_args = {}
         for stage, key in aggregation_stages:
-            _args[key] = [args[key]] if key in args else []
+            aggregate_args[key] = [find_args[key]] if key in find_args else []
 
         for join, junction in joins:
 
             jfield, jtype, unwind = join
             local, fresource, foreign = junction
 
-            _args['lookup'].append({
+            aggregate_args['lookup'].append({
                 'from': fresource,
                 'localField': local,
                 'foreignField': foreign,
@@ -350,7 +350,7 @@ class Mongo(DataLayer):
                 mfilter = self.parse_filter_query(mfilter)
                 mfilter = self._mongotize(mfilter, resource)
 
-                _args['projection'][0].update({
+                aggregate_args['projection'][0].update({
                     jfield: {
                         '$filter': {
                             'input': rfield,
@@ -360,21 +360,21 @@ class Mongo(DataLayer):
                     }
                 })
             else:
-                _args['projection'][0].update({
+                aggregate_args['projection'][0].update({
                     jfield: 1
                 })
 
 
             if jtype == 'inner':
-                if len(_args['joined_match']) == 0:
-                    _args['joined_match'] = [{}]
+                if len(aggregate_args['joined_match']) == 0:
+                    aggregate_args['joined_match'] = [{}]
 
-                _args['joined_match'][0].update({
+                aggregate_args['joined_match'][0].update({
                     jfield: {'$not': {'$size': 0}}
                 })
 
             if unwind:
-                _args['unwind'].append({
+                aggregate_args['unwind'].append({
                     'path': rfield,
                     'preserveNullAndEmptyArrays': jtype == 'outer'
                 })
@@ -382,14 +382,14 @@ class Mongo(DataLayer):
         pipeline = []
         counter_pipeline = []
         for stage, key in aggregation_stages:
-            for param in _args[key]:
+            for param in aggregate_args[key]:
                 op = {stage: param}
                 pipeline.append(op)
 
                 if not key in ['limit', 'skip']:
                     counter_pipeline.append(op)
 
-        def _aggregation_count(*_, **kwargs):
+        def _aggregation_count(*args, **kwargs):
             try:
                 counter = resource_collection.aggregate(counter_pipeline + [{
                     '$group': {
