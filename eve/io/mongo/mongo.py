@@ -277,17 +277,17 @@ class Mongo(DataLayer):
         junctions = config.DOMAIN[resource]['junctions']
 
         joins = []
-        for jfield in request.args.getlist('join'):
-            joins.append((jfield, 'outer', False))
+        for join_field in request.args.getlist('join'):
+            joins.append((join_field, 'outer', False))
 
-        for jfield in request.args.getlist('ujoin'):
-            joins.append((jfield, 'outer', True))
+        for join_field in request.args.getlist('ujoin'):
+            joins.append((join_field, 'outer', True))
 
-        for jfield in request.args.getlist('ijoin'):
-            joins.append((jfield, 'inner', False))
+        for join_field in request.args.getlist('ijoin'):
+            joins.append((join_field, 'inner', False))
 
-        for jfield in request.args.getlist('iujoin'):
-            joins.append((jfield, 'inner', True))
+        for join_field in request.args.getlist('iujoin'):
+            joins.append((join_field, 'inner', True))
 
         joins = map(lambda j: (j, junctions[j[0]]), filter(lambda j: j[0] in junctions, joins))
 
@@ -332,26 +332,26 @@ class Mongo(DataLayer):
 
         for join, junction in joins:
 
-            jfield, jtype, unwind = join
+            join_field, join_type, unwind = join
             local, fresource, foreign = junction
 
             aggregate_args['lookup'].append({
                 'from': fresource,
                 'localField': local,
                 'foreignField': foreign,
-                'as': jfield
+                'as': join_field
             })
 
-            fquery = 'filter_{}'.format(jfield)
+            fquery = 'filter_{}'.format(join_field)
 
-            rfield = '$'+jfield
+            rfield = '$'+join_field
             if fquery in request.args:
                 mfilter = request.args[fquery]
                 mfilter = self.parse_filter_query(mfilter)
                 mfilter = self._mongotize(mfilter, resource)
 
                 aggregate_args['projection'][0].update({
-                    jfield: {
+                    join_field: {
                         '$filter': {
                             'input': rfield,
                             'as': 'item',
@@ -361,22 +361,21 @@ class Mongo(DataLayer):
                 })
             else:
                 aggregate_args['projection'][0].update({
-                    jfield: 1
+                    join_field: 1
                 })
 
-
-            if jtype == 'inner':
+            if join_type == 'inner':
                 if len(aggregate_args['joined_match']) == 0:
                     aggregate_args['joined_match'] = [{}]
 
                 aggregate_args['joined_match'][0].update({
-                    jfield: {'$not': {'$size': 0}}
+                    join_field: {'$not': {'$size': 0}}
                 })
 
             if unwind:
                 aggregate_args['unwind'].append({
                     'path': rfield,
-                    'preserveNullAndEmptyArrays': jtype == 'outer'
+                    'preserveNullAndEmptyArrays': join_type == 'outer'
                 })
 
         pipeline = []
