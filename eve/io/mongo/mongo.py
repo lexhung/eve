@@ -265,7 +265,7 @@ class Mongo(DataLayer):
             args['projection'] = projection
 
         joins = self.parse_joins(resource)
-        if joins is not None and len(joins):
+        if joins:
             resource_collection = self.pymongo(resource).db[datasource]
             return self.find_with_aggregation(resource, resource_collection, args, joins)
 
@@ -273,7 +273,9 @@ class Mongo(DataLayer):
 
 
     def parse_joins(self, resource):
-        if not 'junctions' in config.DOMAIN[resource]: return
+        if not 'junctions' in config.DOMAIN[resource]:
+            return None
+
         junctions = config.DOMAIN[resource]['junctions']
 
         joins = []
@@ -344,7 +346,7 @@ class Mongo(DataLayer):
 
             fquery = 'filter_{}'.format(join_field)
 
-            rfield = '$'+join_field
+            join_field_ref = '${}'.format(join_field)
             if fquery in request.args:
                 mfilter = request.args[fquery]
                 mfilter = self.parse_filter_query(mfilter)
@@ -353,7 +355,7 @@ class Mongo(DataLayer):
                 aggregate_args['projection'][0].update({
                     join_field: {
                         '$filter': {
-                            'input': rfield,
+                            'input': join_field_ref,
                             'as': 'item',
                             'cond': mfilter
                         }
@@ -374,7 +376,7 @@ class Mongo(DataLayer):
 
             if unwind:
                 aggregate_args['unwind'].append({
-                    'path': rfield,
+                    'path': join_field_ref,
                     'preserveNullAndEmptyArrays': join_type == 'outer'
                 })
 
