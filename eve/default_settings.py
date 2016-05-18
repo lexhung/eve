@@ -218,6 +218,7 @@ QUERY_PAGE = 'page'
 QUERY_MAX_RESULTS = 'max_results'
 QUERY_EMBEDDED = 'embedded'
 QUERY_AGGREGATION = 'aggregate'
+QUERY_PIPELINE = 'pipeline'
 
 HEADER_TOTAL_COUNT = 'X-Total-Count'
 
