@@ -313,7 +313,7 @@ class Mongo(DataLayer):
         pipeline = filter(process_aggregation_param, pipeline)
 
         resource_collection = self.pymongo(resource).db[datasource]
-        return self.find_with_aggregation(resource, resource_collection, args, pipeline, lazy=aggregation_params is None)
+        return self.find_with_aggregation(resource, resource_collection, args, pipeline)
 
 
     def parse_filter_query(self, where):
@@ -331,7 +331,7 @@ class Mongo(DataLayer):
         return spec
 
 
-    def find_with_aggregation(self, resource, resource_collection, args, userpipe, lazy=False):
+    def find_with_aggregation(self, resource, resource_collection, args, userpipe):
         basepipe = []
 
         for stage, key in [('$match', 'filter'),
@@ -339,6 +339,7 @@ class Mongo(DataLayer):
                            ('$project', 'projection')]:
             if key in args:
                 basepipe.append({stage: args[key]})
+
 
         sortpipe = []
         for key in ('sort', 'skip', 'limit'):
@@ -351,13 +352,7 @@ class Mongo(DataLayer):
 
             sortpipe.append({'$' + key: args[key]})
 
-        if lazy:
-            countpipe = basepipe
-            pipeline  = basepipe + sortpipe + userpipe
-        else:
-            countpipe = basepipe + userpipe
-            pipeline  = basepipe + userpipe + sortpipe
-
+        countpipe = basepipe + userpipe
         def _aggregation_count(*args, **kwargs):
             try:
                 counter = resource_collection.aggregate(countpipe + [{
@@ -371,7 +366,7 @@ class Mongo(DataLayer):
 
             return counter['count']
 
-        self.app.logger.warn(pipeline)
+        pipeline = basepipe + userpipe + sortpipe
         cursor = resource_collection.aggregate(pipeline)
         cursor.count = _aggregation_count
         return cursor
