@@ -199,10 +199,12 @@ def _perform_find(resource, lookup):
     response[config.ITEMS] = documents
 
     try:
-      count = cursor.count(with_limit_and_skip=False)
+        count = cursor.count(with_limit_and_skip=False)
     except AttributeError:
-      count = (req.page - 1) * req.max_results + len(documents) + 1
-      response['_approx'] = True
+        count = (req.page - 1) * req.max_results + len(documents)
+        if len(documents) >= req.max_results:
+            count += 1
+        response['_approx'] = True
 
     headers.append((config.HEADER_TOTAL_COUNT, count))
 
