@@ -278,7 +278,8 @@ class Mongo(DataLayer):
 
         if agg:
             try:
-                aggregation_params = self.parse_filter_query(agg)
+                where = self._mongotize(json.loads(agg), resource)
+                aggregation_params = self.parse_filter_query(where)
             except ValueError:
                 abort(400, description='Aggregation query could not be parsed.')
         else:
@@ -318,7 +319,7 @@ class Mongo(DataLayer):
 
     def parse_filter_query(self, where):
         try:
-            spec = self._sanitize(json.loads(where))
+            spec = self._sanitize(where)
         except HTTPException:
             # _sanitize() is raising an HTTP exception; let it fire.
             raise
