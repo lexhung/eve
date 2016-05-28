@@ -353,23 +353,22 @@ class Mongo(DataLayer):
 
             sortpipe.append({'$' + key: args[key]})
 
-        countpipe = basepipe + userpipe
-        def _aggregation_count(*args, **kwargs):
-            try:
-                counter = resource_collection.aggregate(countpipe + [{
-                    '$group': {
-                        '_id': None,
-                        'count': {'$sum': 1}
-                    }
-                }]).next()
-            except StopIteration:
-                return 0
-
-            return counter['count']
-
         pipeline = basepipe + userpipe + sortpipe
         cursor = resource_collection.aggregate(pipeline)
-        cursor.count = _aggregation_count
+
+        # def _aggregation_count(*args, **kwargs):
+        #     try:
+        #         counter = resource_collection.aggregate(basepipe + userpipe + [{
+        #             '$group': {
+        #                 '_id': None,
+        #                 'count': {'$sum': 1}
+        #             }
+        #         }]).next()
+        #     except StopIteration:
+        #         return 0
+        #     return counter['count']
+
+        # cursor.count = _aggregation_count
         return cursor
 
 
