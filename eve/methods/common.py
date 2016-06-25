@@ -9,22 +9,28 @@
     :copyright: (c) 2016 by Nicola Iarocci.
     :license: BSD, see LICENSE for more details.
 """
-import time
-from datetime import datetime
-
 import base64
 import simplejson as json
-from bson.errors import InvalidId
+import time
+
 from bson.dbref import DBRef
+from bson.errors import InvalidId
 from copy import copy
-from flask import current_app as app, request, abort, g, Response
+from datetime import datetime
+from eve.utils import auto_fields
+from eve.utils import config
+from eve.utils import debug_error_message
+from eve.utils import document_etag
+from eve.utils import parse_request
+from eve.versioning import get_data_version_relation_document
+from eve.versioning import resolve_document_version
+from flask import Response
+from flask import abort
+from flask import current_app as app
+from flask import g
+from flask import request
 from functools import wraps
 from itsdangerous import TimestampSigner
-
-from eve.utils import parse_request, document_etag, config, \
-    debug_error_message, auto_fields
-from eve.versioning import resolve_document_version, \
-    get_data_version_relation_document
 
 
 def get_document(resource, concurrency_check, **lookup):
@@ -61,9 +67,13 @@ def get_document(resource, concurrency_check, **lookup):
 
     document = app.data.find_one(resource, req, **lookup)
     if document:
-        if not req.if_match and config.IF_MATCH and concurrency_check:
+        e_if_m = config.ENFORCE_IF_MATCH
+        if_m = config.IF_MATCH
+        if not req.if_match and e_if_m and if_m and concurrency_check:
             # we don't allow editing unless the client provides an etag
-            # for the document
+            # for the document or explicitly decides to allow editing by either
+            # disabling the ``concurrency_check`` or ``IF_MATCH`` or
+            # ``ENFORCE_IF_MATCH`` fields.
             abort(428, description='To edit a document '
                   'its etag must be provided using the If-Match header')
 
@@ -322,6 +332,9 @@ def serialize(document, resource=None, schema=None, fields=None):
     """ Recursively handles field values that require data-aware serialization.
     Relies on the app.data.serializers dictionary.
 
+    .. versionchanged:: 0.7
+       Add support for normalizing anyof-like rules inside lists. See #876.
+
     .. versionchanged:: 0.6
        Add support for normalizing dotted fields.
 
@@ -391,6 +404,20 @@ def serialize(document, resource=None, schema=None, fields=None):
                                               schema=sublist_schema['schema'])
                                 elif item_type in app.data.serializers:
                                     sublist[i] = serialize_value(item_type, v)
+                    elif field_schema.get('type') is None:
+                        # a list of items determined by *of rules
+                        for x_of in ['allof', 'anyof', 'oneof', 'noneof']:
+                            for optschema in field_schema.get(x_of, []):
+                                schema = {field: {
+                                    'type': field_type,
+                                    'schema': optschema}}
+                                serialize(document, schema=schema)
+                            x_of_type = '{0}_type'.format(x_of)
+                            for opttype in field_schema.get(x_of_type, []):
+                                schema = {field: {
+                                    'type': field_type,
+                                    'schema': {'type': opttype}}}
+                                serialize(document, schema=schema)
                     else:
                         # a list of one type, arbitrary length
                         field_type = field_schema.get('type')
@@ -414,6 +441,11 @@ def serialize(document, resource=None, schema=None, fields=None):
                         for field in target:
                             target[field] = \
                                 serialize_value(field_type, target[field])
+                    elif field_type == 'dict':
+                        for subdocument in document[field].values():
+                            serialize(
+                                subdocument,
+                                schema=field_schema['valueschema']['schema'])
                 elif field_type in app.data.serializers:
                     # a simple field
                     document[field] = \
