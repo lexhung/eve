@@ -13,7 +13,6 @@
 """
 from bson import tz_util
 from flask import abort, request, current_app as app, Response
-from itsdangerous import TimestampSigner
 
 from eve.auth import requires_auth, resource_auth
 from eve.methods import get, getitem, post, patch, delete, deleteitem, put
@@ -169,18 +168,12 @@ def _resource():
     return request.endpoint.split('|')[0]
 
 
-def media_endpoint(_id, filename=None):
+def media_endpoint(_id):
     """ This endpoint is active when RETURN_MEDIA_AS_URL is True. It retrieves
     a media file and streams it to the client.
 
     .. versionadded:: 0.6
     """
-    try:
-        signer = TimestampSigner(config.SECRET_KEY)
-        _id, uid = signer.unsign(_id, max_age=600).split('.')
-    except:
-        abort(404)
-
     file_ = app.media.get(_id)
     if file_ is None:
         return abort(404)
@@ -196,12 +189,8 @@ def media_endpoint(_id, filename=None):
 
     headers = {
         'Last-Modified': date_to_rfc1123(file_.upload_date),
-        'Content-Length': file_.length
+        'Content-Length': file_.length,
     }
-
-    if config.MEDIA_DOWNLOAD in request.args:
-        fname = getattr(file_, 'filename', None) or filename or str(_id)
-        headers['Content-Disposition'] = 'attachment; filename="{}"'.format(fname)
 
     response = Response(file_, headers=headers, mimetype=file_.content_type,
                         direct_passthrough=True)

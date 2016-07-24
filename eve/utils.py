@@ -206,7 +206,10 @@ def date_to_str(date):
 
     :param date: the datetime value to convert.
     """
-    return datetime.strftime(date, config.DATE_FORMAT) if date else None
+    try:
+        return datetime.strftime(date, config.DATE_FORMAT)
+    except ValueError:
+        return None
 
 
 def date_to_rfc1123(date):
