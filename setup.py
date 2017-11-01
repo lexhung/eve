@@ -6,28 +6,27 @@ with open('README.rst') as f:
     LONG_DESCRIPTION = f.read()
 
 install_requires = [
-    'cerberus>=0.9.2,<0.10',
-    'events>=0.2.1,<0.3',
+    'cerberus>=1.1',
+    'events>=0.3,<0.4',
     'simplejson>=3.3.0,<4.0',
-    'werkzeug>=0.9.4,<0.11',
+    'werkzeug>=0.9.4,<=0.11.15',
     'markupsafe>=0.23,<1.0',
-    'jinja2>=2.7.2,<3.0',
-    'itsdangerous>=0.22,<1.0',
-    'flask>=0.10.1,<0.11',
-    'pymongo>=3.1',
-    'flask-pymongo>=0.4',
+    'jinja2>=2.8,<3.0',
+    'itsdangerous>=0.24,<1.0',
+    'flask>=0.10.1,<=0.12',
+    'pymongo>=3.5',
 ]
 
 try:
-    from collections import OrderedDict  # noqa
+    from collections import Counter, OrderedDict  # noqa
 except ImportError:
-    # Python 2.6 needs this back-port
-    install_requires.append('ordereddict')
+    # Python 2.6
+    install_requires.append('backport_collections')
 
 
 setup(
     name='Eve',
-    version='0.6.2.dev0',
+    version='0.8-dev',
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     author='Nicola Iarocci',
@@ -52,6 +51,8 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
 )

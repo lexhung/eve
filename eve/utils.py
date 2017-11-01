@@ -6,7 +6,7 @@
 
     Utility functions and classes.
 
-    :copyright: (c) 2015 by Nicola Iarocci.
+    :copyright: (c) 2017 by Nicola Iarocci.
     :license: BSD, see LICENSE for more details.
 """
 
@@ -48,10 +48,10 @@ config = Config()
 class ParsedRequest(object):
     """ This class, by means of its attributes, describes a client request.
 
-    .. versuinchanged;; 9,5
+    .. versionchanged:: 9,5
        'args' keyword.
 
-    .. versonchanged:: 0.1.0
+    .. versionchanged:: 0.1.0
        'embedded' keyword.
 
     .. versionchanged:: 0.0.6
@@ -89,6 +89,9 @@ class ParsedRequest(object):
     # Only relevant when soft delete is enabled. Defaults to False.
     show_deleted = False
 
+    # `aggregation` value of the query string (?aggregation). Defaults to None.
+    aggregation = None
+
     # `args` value of the original request. Defaults to None.
     args = None
 
@@ -99,11 +102,14 @@ def parse_request(resource):
 
     :param resource: the resource currently being accessed by the client.
 
+    .. versionchanged:: 0.7
+       Handle ETag values surrounded by double quotes. Closes #794.
+
     .. versionchanged:: 0.5
        Support for custom query parameters via configuration settings.
        Minor DRY updates.
 
-    .. versionchagend:: 0.1.0
+    .. versionchanged:: 0.1.0
        Support for embedded documents.
 
     .. versionchanged:: 0.0.6
@@ -127,6 +133,8 @@ def parse_request(resource):
         r.sort = args.get(config.QUERY_SORT)
     if settings['embedding']:
         r.embedded = args.get(config.QUERY_EMBEDDED)
+    if settings['datasource']['aggregation']:
+        r.aggregation = args.get(config.QUERY_AGGREGATION)
 
     r.show_deleted = config.SHOW_DELETED_PARAM in args
 
@@ -152,13 +160,22 @@ def parse_request(resource):
         if r.max_results > config.PAGINATION_LIMIT:
             r.max_results = config.PAGINATION_LIMIT
 
+    def etag_parse(challenge):
+        if challenge in headers:
+            etag = headers[challenge]
+            # allow weak etags (Eve does not support byte-range requests)
+            if etag.startswith('W/\"'):
+                etag = etag.lstrip('W/')
+            # remove double quotes from challenge etag format to allow direct
+            # string comparison with stored values
+            return etag.replace('\"', '')
+        else:
+            return None
+
     if headers:
         r.if_modified_since = weak_date(headers.get('If-Modified-Since'))
-        # TODO if_none_match and if_match should probably be validated as
-        # valid etags, returning 400 on fail. Not sure however since
-        # we're just going to use these for string-type comparision
-        r.if_none_match = headers.get('If-None-Match')
-        r.if_match = headers.get('If-Match')
+        r.if_none_match = etag_parse('If-None-Match')
+        r.if_match = etag_parse('If-Match')
 
     return r
 
@@ -427,6 +444,7 @@ def auto_fields(resource):
         fields.append(config.DELETED)
 
     return fields
+
 
 # Base string type that is compatible with both Python 2.x and 3.x.
 str_type = str if sys.version_info[0] == 3 else basestring

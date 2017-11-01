@@ -118,14 +118,14 @@ class TestRenders(TestBase):
         r = self.test_client.get('/')
         self.assertFalse('Access-Control-Allow-Origin' in r.headers)
         self.assertFalse('Access-Control-Allow-Methods' in r.headers)
-        self.assertFalse('Access-Control-Allow-Max-Age' in r.headers)
+        self.assertFalse('Access-Control-Max-Age' in r.headers)
         self.assertFalse('Access-Control-Expose-Headers' in r.headers)
         self.assertFalse('Access-Control-Allow-Credentials' in r.headers)
         self.assert200(r.status_code)
 
         # test that if X_DOMAINS is set to '*', then any Origin value is
         # allowed. Also test that only the Origin header included with the
-        # request will be # returned back to the client.
+        # request will be returned to the client.
         self.app.config['X_DOMAINS'] = '*'
         r = self.test_client.get('/', headers=[('Origin',
                                                 'http://example.com')])
@@ -134,7 +134,7 @@ class TestRenders(TestBase):
                          'http://example.com')
         self.assertEqual(r.headers['Vary'], 'Origin')
 
-        # Given that CORS is activated with X_DOMAINS = '*'
+        # Given that CORS is activated with X_DOMAINS = '*',
         # test that if X_ALLOW_CREDENTIALS is set to True
         # then the relevant header is included in the response
         self.app.config['X_ALLOW_CREDENTIALS'] = True
@@ -172,20 +172,73 @@ class TestRenders(TestBase):
         # other Access-Control-Allow- headers are included.
         self.assertTrue('Access-Control-Allow-Headers' in r.headers)
         self.assertTrue('Access-Control-Allow-Methods' in r.headers)
-        self.assertTrue('Access-Control-Allow-Max-Age' in r.headers)
+        self.assertTrue('Access-Control-Max-Age' in r.headers)
         self.assertTrue('Access-Control-Expose-Headers' in r.headers)
+
+        # unescaped dots of old (pre v0.7) or malicious X_DOMAINS definitions
+        # would be interpreted as any character, causing security issue with
+        # bad guy registering wwwxgithub.com to pass as www.github.com (see
+        # #660).
+
+        self.app.config['X_DOMAINS'] = ['http://www.github.com']
+        r = self.test_client.get('/', headers=[('Origin',
+                                                'http://wwwxgithub.com')])
+        self.assert200(r.status_code)
+        self.assertFalse('http://wwwxgithub.com' in
+                         r.headers['Access-Control-Allow-Origin'])
+
+        # test that X_DOMAINS does not match
+        # if the origin contains extra characters (#974)
+        r = self.test_client.get('/', headers=[('Origin',
+                                                'http://1of2.com:8000')])
+        self.assert200(r.status_code)
+        self.assertEqual(r.headers['Access-Control-Allow-Origin'], '')
+
+    def test_CORS_regex(self):
+        # test if X_DOMAINS_RE is set with a list of regexes,
+        # origins are matched against this list (#974)
+        self.app.config['X_DOMAINS_RE'] = ['^http://sub-\d{3}\.domain\.com$']
+
+        r = self.test_client.get('/', headers=[('Origin',
+                                                'http://sub-123.domain.com')])
+        self.assert200(r.status_code)
+        self.assertEqual(r.headers['Access-Control-Allow-Origin'],
+                         'http://sub-123.domain.com')
+
+        # test that similar domains are not allowed
+        r = self.test_client.get('/', headers=[('Origin',
+                                                'http://sub-1234.domain.com')])
+        self.assert200(r.status_code)
+        self.assertEqual(r.headers['Access-Control-Allow-Origin'], '')
+
+        r = self.test_client.get(
+            '/', headers=[('Origin', 'http://sub-123.domain.com:8000')])
+        self.assert200(r.status_code)
+        self.assertEqual(r.headers['Access-Control-Allow-Origin'], '')
+
+        r = self.test_client.get('/', headers=[('Origin',
+                                                'http://sub-123xdomain.com')])
+        self.assert200(r.status_code)
+        self.assertEqual(r.headers['Access-Control-Allow-Origin'], '')
+
+        # test that invalid regexes are ignored, especially '*'
+        self.app.config['X_DOMAINS_RE'] = ['*']
+        r = self.test_client.get('/', headers=[('Origin',
+                                                'http://www.example.com')])
+        self.assert200(r.status_code)
+        self.assertEqual(r.headers['Access-Control-Allow-Origin'], '')
 
     def test_CORS_MAX_AGE(self):
         self.app.config['X_DOMAINS'] = '*'
         r = self.test_client.get('/', headers=[('Origin',
                                                 'http://example.com')])
-        self.assertEqual(r.headers['Access-Control-Allow-Max-Age'],
+        self.assertEqual(r.headers['Access-Control-Max-Age'],
                          '21600')
 
         self.app.config['X_MAX_AGE'] = 2000
         r = self.test_client.get('/', headers=[('Origin',
                                                 'http://example.com')])
-        self.assertEqual(r.headers['Access-Control-Allow-Max-Age'],
+        self.assertEqual(r.headers['Access-Control-Max-Age'],
                          '2000')
 
     def test_CORS_OPTIONS(self, url='/', methods=None):
@@ -195,7 +248,7 @@ class TestRenders(TestBase):
         r = self.test_client.open(url, method='OPTIONS')
         self.assertFalse('Access-Control-Allow-Origin' in r.headers)
         self.assertFalse('Access-Control-Allow-Methods' in r.headers)
-        self.assertFalse('Access-Control-Allow-Max-Age' in r.headers)
+        self.assertFalse('Access-Control-Max-Age' in r.headers)
         self.assertFalse('Access-Control-Expose-Headers' in r.headers)
         self.assertFalse('Access-Control-Allow-Credentials' in r.headers)
         self.assert200(r.status_code)
@@ -245,7 +298,7 @@ class TestRenders(TestBase):
             self.assertTrue(m in r.headers['Access-Control-Allow-Methods'])
 
         self.assertTrue('Access-Control-Allow-Origin' in r.headers)
-        self.assertTrue('Access-Control-Allow-Max-Age' in r.headers)
+        self.assertTrue('Access-Control-Max-Age' in r.headers)
         self.assertTrue('Access-Control-Expose-Headers' in r.headers)
 
         r = self.test_client.get(url, headers=[('Origin',
@@ -280,4 +333,10 @@ class TestRenders(TestBase):
         self.test_CORS_OPTIONS(url, methods)
         url = '%s%s/%s' % (prefix, self.known_resource_url, self.item_ref)
         methods = ['GET', 'OPTIONS']
-        self.test_CORS_OPTIONS(url, methods)
+
+    def test_CORS_OPTIONS_schema(self):
+        """ Test that CORS is also supported at SCHEMA_ENDPOINT """
+        self.app.config['SCHEMA_ENDPOINT'] = 'schema'
+        self.app._init_schema_endpoint()
+        methods = ['GET', 'OPTIONS']
+        self.test_CORS_OPTIONS('schema', methods)

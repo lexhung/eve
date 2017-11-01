@@ -11,6 +11,18 @@ from eve.io.mongo import Mongo, Validator
 
 
 class TestConfig(TestBase):
+    def test_allow_unknown_with_soft_delete(self):
+        my_settings = {
+            'ALLOW_UNKNOWN': True,
+            'SOFT_DELETE': True,
+            'DOMAIN': {'contacts': {}}
+        }
+        try:
+            self.app = Eve(settings=my_settings)
+        except TypeError:
+            self.fail("ALLOW_UNKNOWN and SOFT_DELETE enabled should not cause "
+                      "a crash.")
+
     def test_default_import_name(self):
         self.assertEqual(self.app.import_name, eve.__package__)
 
@@ -66,14 +78,17 @@ class TestConfig(TestBase):
         self.assertEqual(self.app.config['QUERY_PAGE'], 'page')
         self.assertEqual(self.app.config['QUERY_MAX_RESULTS'], 'max_results')
         self.assertEqual(self.app.config['QUERY_EMBEDDED'], 'embedded')
+        self.assertEqual(self.app.config['QUERY_AGGREGATION'], 'aggregate')
 
         self.assertEqual(self.app.config['JSON_SORT_KEYS'], False)
         self.assertEqual(self.app.config['SOFT_DELETE'], False)
         self.assertEqual(self.app.config['DELETED'], '_deleted')
         self.assertEqual(self.app.config['SHOW_DELETED_PARAM'], 'show_deleted')
         self.assertEqual(self.app.config['STANDARD_ERRORS'],
-                         [400, 401, 403, 404, 405, 406, 409, 410, 412, 422])
+                         [400, 401, 404, 405, 406, 409, 410, 412, 422, 428])
         self.assertEqual(self.app.config['UPSERT_ON_PUT'], True)
+        self.assertEqual(self.app.config['JSON_REQUEST_CONTENT_TYPES'],
+                         ['application/json'])
 
     def test_settings_as_dict(self):
         my_settings = {'API_VERSION': 'override!', 'DOMAIN': {'contacts': {}}}
@@ -81,6 +96,13 @@ class TestConfig(TestBase):
         self.assertEqual(self.app.config['API_VERSION'], 'override!')
         # did not reset other defaults
         self.assertEqual(self.app.config['MONGO_WRITE_CONCERN'], {'w': 1})
+
+    def test_existing_env_config(self):
+        env = os.environ
+        os.environ = {'EVE_SETTINGS': 'test_settings_env.py'}
+        self.app = Eve()
+        self.assertTrue('env_domain' in self.app.config['DOMAIN'])
+        os.environ = env
 
     def test_unexisting_env_config(self):
         env = os.environ
@@ -156,6 +178,25 @@ class TestConfig(TestBase):
         del(schema['person']['data_relation']['resource'])
         self.assertValidateSchemaFailure('invoices', schema, 'resource')
 
+    def test_validate_invalid_field_names(self):
+        schema = self.domain['invoices']['schema']
+        schema['te$t'] = {'type': 'string'}
+        self.assertValidateSchemaFailure('invoices', schema, 'te$t')
+        del(schema['te$t'])
+
+        schema['te.t'] = {'type': 'string'}
+        self.assertValidateSchemaFailure('invoices', schema, 'te.t')
+        del(schema['te.t'])
+
+        schema['test_a_dict_schema'] = {
+            'type': 'dict',
+            'schema': {'te$t': {'type': 'string'}}
+        }
+        self.assertValidateSchemaFailure('invoices', schema, 'te$t')
+
+        schema['test_a_dict_schema']['schema'] = {'te.t': {'type': 'string'}}
+        self.assertValidateSchemaFailure('invoices', schema, 'te.t')
+
     def test_set_schema_defaults(self):
         # default data_relation field value
         schema = self.domain['invoices']['schema']
@@ -165,8 +206,7 @@ class TestConfig(TestBase):
                          self.domain['contacts']['id_field'])
         id_field = self.domain['invoices']['id_field']
         self.assertTrue(id_field in schema)
-        self.assertEqual(schema[id_field],
-                         {'type': 'objectid', 'unique': True})
+        self.assertEqual(schema[id_field], {'type': 'objectid'})
 
     def test_set_defaults(self):
         self.domain.clear()
@@ -227,8 +267,6 @@ class TestConfig(TestBase):
                          self.app.config['AUTH_FIELD'])
         self.assertEqual(settings['allow_unknown'],
                          self.app.config['ALLOW_UNKNOWN'])
-        self.assertEqual(settings['transparent_schema_rules'],
-                         self.app.config['TRANSPARENT_SCHEMA_RULES'])
         self.assertEqual(settings['extra_response_fields'],
                          self.app.config['EXTRA_RESPONSE_FIELDS'])
         self.assertEqual(settings['mongo_write_concern'],
@@ -255,6 +293,8 @@ class TestConfig(TestBase):
                          dict((field, 1) for (field) in compare))
         self.assertEqual(datasource['source'], resource)
         self.assertEqual(datasource['filter'], None)
+
+        self.assertEqual(datasource['aggregation'], None)
 
     def test_validate_roles(self):
         for resource in self.domain:
@@ -303,24 +343,6 @@ class TestConfig(TestBase):
             self.assertTrue(expected.lower() in str(e).lower())
         else:
             self.fail("SchemaException expected but not raised.")
-
-    def test_schema_defaults(self):
-        self.domain.clear()
-        self.domain['resource'] = {
-            'schema': {
-                'title': {
-                    'type': 'string',
-                    'default': 'Mr.',
-                },
-                'price': {
-                    'type': 'integer',
-                    'default': 100
-                },
-            }
-        }
-        self.app.set_defaults()
-        settings = self.domain['resource']
-        self.assertEqual({'title': 'Mr.', 'price': 100}, settings['defaults'])
 
     def test_url_helpers(self):
         self.assertNotEqual(self.app.config.get('URLS'), None)
@@ -454,7 +476,7 @@ class TestConfig(TestBase):
             'mongo_indexes': {
                 'name': [('name', 1)],
                 'composed': [('name', 1), ('other_field', 1)],
-                'arguments': ([('lat_long', "2d")], {"sparce": True})
+                'arguments': ([('lat_long', "2d")], {"sparse": True})
             }
         }
         self.app.register_resource('mongodb_features', settings)
@@ -504,3 +526,39 @@ class TestConfig(TestBase):
 
         challenge = lambda code: self.assertTrue(code in handlers)  # noqa
         map(challenge, codes)
+
+    def test_mongodb_settings(self):
+        # Create custom app with mongodb settings.
+        settings = {
+            'DOMAIN': {'contacts': {}},
+            'MONGO_OPTIONS': {
+                'connect': False
+            }
+        }
+        app = Eve(settings=settings)
+        # Check if settings are set.
+        self.assertEqual(
+            app.config['MONGO_OPTIONS']['connect'],
+            app.config['MONGO_CONNECT']
+        )
+        # Prepare a specific schema with mongo specific settings.
+        settings = {
+            'schema': {
+                'name': {'type': 'string'},
+            },
+            'MONGO_OPTIONS': {
+                'connect': False
+            }
+        }
+        self.app.register_resource('mongodb_settings', settings)
+        # check that settings are set.
+        resource_settings = self.app.config['DOMAIN']['mongodb_settings']
+        self.assertEqual(
+            resource_settings['MONGO_OPTIONS'],
+            settings['MONGO_OPTIONS']
+        )
+        # check that settings are set.
+        self.assertEqual(
+            resource_settings['MONGO_OPTIONS']['connect'],
+            settings['MONGO_OPTIONS']['connect']
+        )

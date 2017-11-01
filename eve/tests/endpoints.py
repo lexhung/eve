@@ -45,12 +45,12 @@ class UUIDValidator(Validator):
     """
     Extends the base mongo validator adding support for the uuid data-type
     """
-    def _validate_type_uuid(self, field, value):
+    def _validate_type_uuid(self, value):
         try:
             UUID(value)
+            return True
         except ValueError:
-            self._error("value '%s' for field '%s' cannot be converted to a "
-                        "UUID" % (value, field))
+            pass
 
 
 class TestCustomConverters(TestMinimal):
@@ -64,7 +64,7 @@ class TestCustomConverters(TestMinimal):
             'item_methods': ['GET', 'PATCH', 'PUT', 'DELETE'],
             'item_url': 'uuid',
             'schema': {
-                '_id': {'type': 'uuid', 'unique': True},
+                '_id': {'type': 'uuid'},
                 'name': {'type': 'string'}
             }
         }
@@ -218,6 +218,29 @@ class TestEndPoints(TestBase):
         r = self.test_prefix.get('/prefix/contacts/')
         self.assert200(r.status_code)
 
+        r = self.test_prefix.post('/prefix/contacts/', data='{}',
+                                  content_type='application/json')
+        self.assert201(r.status_code)
+
+    def test_api_prefix_post_internal(self):
+        # https://github.com/pyeve/eve/issues/810
+        from eve.methods.post import post_internal
+
+        settings_file = os.path.join(self.this_directory, 'test_prefix.py')
+        self.app = Eve(settings=settings_file)
+        self.test_prefix = self.app.test_client()
+
+        # This works fine
+        with self.app.test_request_context(
+                method='POST', path='/prefix/contacts'):
+            _, _, _, status_code, _ = post_internal('contacts', {})
+        self.assert201(status_code)
+
+        # This fails unless #810 is fixed
+        with self.app.test_request_context():
+            _, _, _, status_code, _ = post_internal('contacts', {})
+        self.assert201(status_code)
+
     def test_api_prefix_version(self):
         settings_file = os.path.join(self.this_directory,
                                      'test_prefix_version.py')
@@ -336,3 +359,17 @@ class TestEndPoints(TestBase):
         self.assert405(status_code)
         _, status_code = self.delete(known_schema_path)
         self.assert405(status_code)
+
+    def test_schema_endpoint_does_not_attempt_callable_serialization(self):
+        self.domain[self.known_resource]['schema']['lambda'] = {
+            'type': 'boolean',
+            'coerce': lambda v: v if type(v) is bool else v.lower() in ['true',
+                                                                        '1']
+        }
+        known_schema_path = '/schema/%s' % self.known_resource
+        self.app.config['SCHEMA_ENDPOINT'] = 'schema'
+        self.app._init_schema_endpoint()
+
+        r = self.test_client.get(known_schema_path)
+        self.assert200(r.status_code)
+        self.assertEqual(json.loads(r.data)['lambda']['coerce'], '<callable>')

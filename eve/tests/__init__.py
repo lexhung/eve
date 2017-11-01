@@ -7,7 +7,7 @@ import random
 import os
 import simplejson as json
 from datetime import datetime, timedelta
-from flask.ext.pymongo import MongoClient
+from pymongo import MongoClient
 from bson import ObjectId
 from eve.tests.test_settings import MONGO_PASSWORD, MONGO_USERNAME, \
     MONGO_DBNAME, DOMAIN, MONGO_HOST, MONGO_PORT
@@ -322,6 +322,9 @@ class TestMinimal(unittest.TestCase):
     def assert412(self, status):
         self.assertEqual(status, 412)
 
+    def assert428(self, status):
+        self.assertEqual(status, 428)
+
     def assert500(self, status):
         self.assertEqual(status, 500)
 
@@ -422,6 +425,14 @@ class TestBase(TestMinimal):
                                 self.invoice_id))
 
         self.epoch = date_to_str(datetime(1970, 1, 1))
+
+        self.products = 'products'
+        self.products_url = ('/%s' %
+                             self.domain[self.products]['url'])
+
+        self.child_products = 'child_products'
+        self.child_products_url = ('/%s' %
+                                   self.domain[self.child_products]['url'])
 
     def response_item(self, response, i=0):
         if self.app.config['HATEOAS']:
@@ -536,6 +547,13 @@ class TestBase(TestMinimal):
             transactions.append(transaction)
         return transactions
 
+    def generate_products(self):
+        products = self.random_products(10)
+        skus = [product['sku'] for product in products]
+        for counter, sku in enumerate(skus[5:], 0):
+            products[counter]['parent_product'] = sku
+        return products
+
     def bulk_insert(self):
         _db = self.connection[MONGO_DBNAME]
         _db.contacts.insert(self.random_contacts(self.known_resource_count))
@@ -543,5 +561,6 @@ class TestBase(TestMinimal):
         _db.payments.insert(self.random_payments(10))
         _db.invoices.insert(self.random_invoices(1))
         _db.internal_transactions.insert(self.random_internal_transactions(4))
-        _db.products.insert(self.random_products(2))
+        products = self.generate_products()
+        _db.products.insert(products)
         self.connection.close()

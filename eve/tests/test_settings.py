@@ -130,9 +130,9 @@ contacts = {
         'key1': {
             'type': 'string',
         },
-        'propertyschema_dict': {
+        'keyschema_dict': {
             'type': 'dict',
-            'propertyschema': {'type': 'string', 'regex': '[a-z]+'}
+            'keyschema': {'type': 'string', 'regex': '[a-z]+'}
         },
         'valueschema_dict': {
             'type': 'dict',
@@ -146,6 +146,15 @@ contacts = {
         },
         'anumber': {
             'type': 'number'
+        },
+        'dict_valueschema': {
+            'type': 'dict',
+            'valueschema': {
+                'type': 'dict',
+                'schema': {
+                    'challenge': {'type': 'objectid'}
+                }
+            }
         }
     }
 }
@@ -170,7 +179,12 @@ invoices = {
         'invoicing_contacts': {
             'type': 'list',
             'data_relation': {'resource': 'contacts'}
-        }
+        },
+        'persondbref': {
+            'type': 'dbref',
+            'data_relation': {'resource': 'contacts'}
+        },
+        'decimal_number': {'type': 'decimal'},
     }
 }
 
@@ -284,8 +298,7 @@ products = {
     'schema': {
         'sku': {
             'type': 'string',
-            'maxlength': 16,
-            'unique': True
+            'maxlength': 16
         },
         'title': {
             'type': 'string',
