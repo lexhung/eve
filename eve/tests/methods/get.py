@@ -205,6 +205,15 @@ class TestGet(TestBase):
         _, status = self.get(self.known_resource, '?where=%s' % where)
         self.assert400(status)
 
+    def test_get_mongo_query_blacklist_nested(self):
+        where = '{"$or": [{"$where": "this.ref == ''%s''"}]}' % self.item_name
+        _, status = self.get(self.known_resource, '?where=%s' % where)
+        self.assert400(status)
+
+        where = '{"$or": [{"ref": {"$regex": "%s"}}]}' % self.item_name
+        _, status = self.get(self.known_resource, '?where=%s' % where)
+        self.assert400(status)
+
     def test_get_where_mongo_objectid_as_string(self):
         where = '{"tid": "%s"}' % self.item_tid
         response, status = self.get(self.known_resource, '?where=%s' % where)
@@ -1243,6 +1252,53 @@ class TestGet(TestBase):
         docs = response['_items']
         self.assertEqual(len(docs), 4)
 
+    def test_get_aggregation_with_lists(self):
+        _db = self.connection[MONGO_DBNAME]
+        _db.aggregate_test.insert_many(
+            [
+                {"x": 1, "tags": ["a", "b", "c"]},
+                {"x": 2, "tags": ["a"]},
+                {"x": 3, "tags": ["a", "b"]},
+                {"x": [4], "tags": []},
+            ]
+        )
+
+        self.app.register_resource(
+            'aggregate_test', {
+                'datasource': {
+                    'aggregation': {
+                        'pipeline': [
+                            {
+                                "$match": {
+                                    "$or": [
+                                        {"tags": "$match_tags"},
+                                        {"x": ["$x"]}
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+
+        response, status = self.get(
+            'aggregate_test?aggregate={"$match_tags": "a"}')
+        self.assert200(status)
+        docs = response['_items']
+        self.assertEqual(len(docs), 3)
+
+        response, status = self.get(
+            'aggregate_test?aggregate={"$match_tags": ["a", "b"]}')
+        self.assert200(status)
+        docs = response['_items']
+        self.assertEqual(len(docs), 1)
+
+        response, status = self.get('aggregate_test?aggregate={"$x": 4}')
+        self.assert200(status)
+        docs = response['_items']
+        self.assertEqual(len(docs), 1)
+
     def test_get_aggregation_pagination(self):
         _db = self.connection[MONGO_DBNAME]
 
@@ -1313,6 +1369,27 @@ class TestGet(TestBase):
         self.assert200(status)
         items = response['_items']
         self.assertEqual(len(items), num)
+
+    def test_get_query_bitwise_query_operators(self):
+        del(self.domain['contacts']['schema']['ref']['required'])
+        response, status = self.delete(self.known_resource_url)
+        self.assert204(status)
+
+        data = {'prog': 20}  # 00010100
+        response, status = self.post(self.known_resource_url, data=data)
+        self.assert201(status)
+
+        where = '?where={"prog": {"$bitsAllClear": [1, 5]}}'
+        response, status = self.get(self.known_resource, where)
+        self.assert200(status)
+        items = response['_items']
+        self.assertEqual(1, len(items))
+
+        where = '?where={"prog": {"$bitsAllClear": [2, 5]}}'
+        response, status = self.get(self.known_resource, where)
+        self.assert200(status)
+        items = response['_items']
+        self.assertEqual(0, len(items))
 
     def assertGet(self, response, status, resource=None):
         self.assert200(status)

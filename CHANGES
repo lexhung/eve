@@ -8,6 +8,13 @@ Development
 
 Version 0.8
 ~~~~~~~~~~~
+- Fix: add sphinxcontrib-embedly to dev-requirements.txt.
+- New: when the media endpoint is enabled, the default authentication class
+  will be used to secure  it. Closes #1083.
+- New: Add support for MongoDB bitwise query operators ``$bitsAllClear``,
+  ``bitsAllSet``, ``bitsAnyClear``, ``bitsAnySet``. Closes 1053 (Qiang Zhang).
+- Fix: Aggregation query parameter does not replace keys in the lists. Closes
+  #1025 (Serge Kir).
 - Fix: Removed OrderedDict dependency; use ``OrderedDict`` from
   ``backport_collections`` instead (Carl George).
 - New: support fpr MongoDB decimal type ``bson.decimal128.Decimal128`` (Amedeo
@@ -70,6 +77,15 @@ Breaking Changes
 
 Stable
 ------
+
+Version 0.7.5
+~~~~~~~~~~~~~
+
+Released on 4 December, 2017
+
+- Fix: A query was not fully traversed in the sanitization. Therefore the
+  blacklist for mongo wueries could be bypassed, allowing for dangerous
+  ``$where`` queries (Moritz Schneider).
 
 Version 0.7.4
 ~~~~~~~~~~~~~
