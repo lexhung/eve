@@ -96,11 +96,14 @@ class ParsedRequest(object):
     args = None
 
 
-def parse_request(resource):
+def parse_request(resource, args=None, headers=None):
     """ Parses a client request, returning instance of :class:`ParsedRequest`
     containing relevant request data.
 
     :param resource: the resource currently being accessed by the client.
+
+    .. versionchanged:: 0.9
+       Allow injection of custom request arguments and headers
 
     .. versionchanged:: 0.7
        Handle ETag values surrounded by double quotes. Closes #794.
@@ -118,8 +121,8 @@ def parse_request(resource):
     .. versionchanged: 0.0.5
        Support for optional filters, sorting and pagination.
     """
-    args = request.args
-    headers = request.headers
+    args = args or request.args
+    headers = headers or request.headers
 
     r = ParsedRequest()
     r.args = args
