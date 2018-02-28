@@ -12,6 +12,7 @@
 import fnmatch
 import os
 import sys
+import warnings
 
 import copy
 from events import Events
@@ -20,11 +21,13 @@ from werkzeug.routing import BaseConverter
 from werkzeug.serving import WSGIRequestHandler
 
 import eve
+from eve import default_settings
 from eve.endpoints import collections_endpoint, item_endpoint, home_endpoint, \
     error_endpoint, media_endpoint, schema_collection_endpoint, \
     schema_item_endpoint
 from eve.exceptions import ConfigException, SchemaException
-from eve.io.mongo import Mongo, Validator, GridFSMediaStorage, create_index
+from eve.io.mongo import Mongo, Validator, GridFSMediaStorage, \
+    ensure_mongo_indexes
 from eve.logging import RequestFilter
 from eve.utils import api_prefix, extract_key_values
 
@@ -259,6 +262,34 @@ class Eve(Flask, Events):
         self.config['MONGO_CONNECT'] = self.config['MONGO_OPTIONS'].get(
             'connect', True
         )
+
+        self.check_deprecated_features()
+
+    def check_deprecated_features(self):
+        """ Method checks for usage of deprecated features.
+        """
+
+        def deprecated_renderers_settings():
+            """ Checks if JSON or XML setting is still being used instead of
+            RENDERERS and if so, composes new settings.
+            """
+            msg = '{} setting is deprecated and will be removed' \
+                  ' in future release. Please use RENDERERS instead.'
+
+            if 'JSON' in self.config or 'XML' in self.config:
+                self.config['RENDERERS'] = default_settings.RENDERERS.copy()
+
+            if 'JSON' in self.config:
+                warnings.warn(msg.format('JSON'))
+                if not self.config['JSON']:
+                    self.config['RENDERERS'].remove('eve.render.JSONRenderer')
+
+            if 'XML' in self.config:
+                warnings.warn(msg.format('XML'))
+                if not self.config['XML']:
+                    self.config['RENDERERS'].remove('eve.render.XMLRenderer')
+
+        deprecated_renderers_settings()
 
     def validate_domain_struct(self):
         """ Validates that Eve configuration settings conform to the
@@ -894,16 +925,7 @@ class Eve(Flask, Events):
             )
 
         # create the mongo db indexes
-        mongo_indexes = self.config['DOMAIN'][resource]['mongo_indexes']
-        if mongo_indexes:
-            for name, value in mongo_indexes.items():
-                if isinstance(value, tuple):
-                    list_of_keys, index_options = value
-                else:
-                    list_of_keys = value
-                    index_options = {}
-
-                create_index(self, resource, name, list_of_keys, index_options)
+        ensure_mongo_indexes(self, resource)
 
         # flask-pymongo compatibility.
         if 'MONGO_OPTIONS' in self.config['DOMAIN']:

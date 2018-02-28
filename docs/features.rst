@@ -488,9 +488,9 @@ want to turn HATEOAS off? Well, if you know that your client application is not
 going to use the feature, then you might want to save on both bandwidth and
 performance.
 
-.. _jsonxml:
+.. _rendering:
 
-JSON and XML Rendering
+Rendering
 ----------------------
 Eve responses are automatically rendered as JSON (the default) or XML,
 depending on the request ``Accept`` header. Inbound documents (for inserts and
@@ -510,10 +510,18 @@ edits) are in JSON format.
         <link rel="child" href="works" title="works" />
     </resource>
 
-XML support can be disabled by setting ``XML`` to ``False`` in the settings
-file. JSON support can be disabled by setting ``JSON`` to ``False``.  Please
-note that at least one mime type must always be enabled, either implicitly or
-explicitly. By default, both are supported.
+Default renderers might be changed by editing ``RENDERERS`` value in the settings file.
+
+.. code-block:: python
+
+    RENDERERS = [
+        'eve.render.JSONRenderer',
+        'eve.render.XMLRenderer'
+    ]
+
+You can create your own renderer by subclassing ``eve.render.Renderer``. Each
+renderer should set valid ``mime`` attr and have ``.render()`` method implemented.
+Please note that at least one renderer must always be enabled.
 
 .. _conditional_requests:
 
@@ -1364,7 +1372,7 @@ the items as needed before they are returned to the client.
     >>> app.on_fetched_resource += before_returning_items
     >>> app.on_fetched_resource_contacts += before_returning_contacts
     >>> app.on_fetched_item += before_returning_item
-    >>> app.on_fetched_item_contact += before_returning_contact
+    >>> app.on_fetched_item_contacts += before_returning_contact
 
 It is important to note that fetch events will work with `Document
 Versioning`_ for specific document versions or accessing all document
@@ -1570,7 +1578,7 @@ File Storage
 ------------
 Media files (images, pdf, etc.) can be uploaded as ``media`` document
 fields. Upload is done via ``POST``, ``PUT`` and
-``PATCH`` as usual, but using the ``multipart/data-form`` content-type.
+``PATCH`` as usual, but using the ``multipart/form-data`` content-type.
 
 Let us assume that the ``accounts`` endpoint has a schema like this:
 
@@ -1733,9 +1741,9 @@ response payloads by sending requests like this one:
 
 .. _multipart:
 
-Note on media files as ``multipart/data-form``
+Note on media files as ``multipart/form-data``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-If you are uploading media files as ``multipart/data-form`` all the
+If you are uploading media files as ``multipart/form-data`` all the
 additional fields except the file fields will be treated as ``strings``
 for all field validation purposes.  If you have already defined some of
 the resource fields to be of different type (boolean, number, list etc)
