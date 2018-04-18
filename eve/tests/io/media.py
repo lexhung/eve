@@ -275,6 +275,50 @@ class TestGridFSMediaStorage(TestBase):
                                                                    _id)))
         self.assert404(s)
 
+    def test_get_media_can_leverage_projection(self):
+        """ Test that static projection expose fields other than media
+        and client projection on media will work.
+        """
+        # post a document with *hiding media*
+        r, s = self._post_hide_media()
+
+        _id = r[self.id_field]
+
+        projection = '{"media": 1}'
+        response, status = self.parse_response(self.test_client.get(
+            '%s/%s?projection=%s' %
+            (self.resource_exclude_media_url, _id, projection))
+        )
+        self.assert200(status)
+
+        self.assertFalse('title' in response)
+        self.assertFalse('ref' in response)
+        # client-side projection should work
+        self.assertTrue('media' in response)
+        self.assertTrue(self.domain[self.known_resource]['id_field']
+                        in response)
+        self.assertTrue(self.app.config['ETAG'] in response)
+        self.assertTrue(self.app.config['LAST_UPDATED'] in response)
+        self.assertTrue(self.app.config['DATE_CREATED'] in response)
+        self.assertTrue(r[self.app.config['LAST_UPDATED']] != self.epoch)
+        self.assertTrue(r[self.app.config['DATE_CREATED']] != self.epoch)
+
+        response, status = self.parse_response(self.test_client.get(
+            '%s/%s' % (self.resource_exclude_media_url, _id)))
+        self.assert200(status)
+
+        self.assertTrue('title' in response)
+        self.assertTrue('ref' in response)
+        # not shown without projection
+        self.assertFalse('media' in response)
+        self.assertTrue(self.domain[self.known_resource]['id_field']
+                        in response)
+        self.assertTrue(self.app.config['ETAG'] in response)
+        self.assertTrue(self.app.config['LAST_UPDATED'] in response)
+        self.assertTrue(self.app.config['DATE_CREATED'] in response)
+        self.assertTrue(r[self.app.config['LAST_UPDATED']] != self.epoch)
+        self.assertTrue(r[self.app.config['DATE_CREATED']] != self.epoch)
+
     def test_gridfs_media_storage_delete_projection(self):
         """ test that #284 is fixed: If you have a media field, and set
         datasource projection to 0 for that field, the media will not be
@@ -332,6 +376,28 @@ class TestGridFSMediaStorage(TestBase):
 
         self.assertEqual('/media/%s' % media_id, url)
         response = self.test_client.get(url)
+        self.assertEqual(self.clean, response.get_data())
+
+    def test_gridfs_partial_media(self):
+        self.app._init_media_endpoint()
+        self.app.config['RETURN_MEDIA_AS_BASE64_STRING'] = False
+        self.app.config['RETURN_MEDIA_AS_URL'] = True
+
+        r, s = self._post()
+        _id = r[self.id_field]
+        where = 'where={"%s": "%s"}' % (self.id_field, _id)
+        r, s = self.parse_response(
+            self.test_client.get('%s?%s' % (self.url, where)))
+        url = r['_items'][0]['media']
+
+        headers = {'Range': 'bytes=0-5'}
+        response = self.test_client.get(url, headers=headers)
+        self.assertEqual(self.clean[:6], response.get_data())
+        headers = {'Range': 'bytes=5-10'}
+        response = self.test_client.get(url, headers=headers)
+        self.assertEqual(self.clean[5:11], response.get_data())
+        headers = {'Range': 'bytes=0-999'}
+        response = self.test_client.get(url, headers=headers)
         self.assertEqual(self.clean, response.get_data())
 
     def test_gridfs_media_storage_base_url(self):
@@ -396,3 +462,10 @@ class TestGridFSMediaStorage(TestBase):
                 self.test_value}
         return self.parse_response(self.test_client.post(
             self.url, data=data, headers=self.headers))
+
+    def _post_hide_media(self):
+        # send a file and a required, ordinary field with no issues
+        data = {'media': (BytesIO(self.clean), 'test.txt'), self.test_field:
+                self.test_value}
+        return self.parse_response(self.test_client.post(
+            self.resource_exclude_media_url, data=data, headers=self.headers))

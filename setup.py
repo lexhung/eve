@@ -24,6 +24,7 @@ except ImportError:
     # Python 2.6
     install_requires.append('backport_collections')
     install_requires.append('importlib==1.0.4')
+    install_requires.append('testfixtures<6.0.0')
 
 
 setup(
@@ -40,6 +41,7 @@ setup(
     test_suite="eve.tests",
     install_requires=install_requires,
     tests_require=['redis', 'testfixtures'],
+    python_requires='>=2.6',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Web Environment',

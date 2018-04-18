@@ -102,10 +102,10 @@ class Mongo(DataLayer):
         ['$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin'] +
         ['$or', '$and', '$not', '$nor'] +
         ['$mod', '$regex', '$text', '$where'] +
-        ['$options', '$search', '$language'] +
-        ['$exists', '$type'] +
+        ['$options', '$search', '$language', '$caseSensitive'] +
+        ['$diacriticSensitive', '$exists', '$type'] +
         ['$geoWithin', '$geoIntersects', '$near', '$nearSphere'] +
-        ['$geometry', '$maxDistance'] +
+        ['$geometry', '$maxDistance', '$box'] +
         ['$all', '$elemMatch', '$size'] +
         ['$bitsAllClear', '$bitsAllSet', '$bitsAnyClear', '$bitsAnySet']
     )
@@ -272,12 +272,13 @@ class Mongo(DataLayer):
         if sort is not None:
             args['sort'] = sort
 
-        if projection is not None:
+        if projection:
             args['projection'] = projection
 
         return self.pymongo(resource).db[datasource].find(**args)
 
-    def find_one(self, resource, req, **lookup):
+    def find_one(self, resource, req, check_auth_value=True,
+                 force_auth_field_projection=False, **lookup):
         """ Retrieves a single document.
 
         :param resource: resource name.
@@ -312,16 +313,18 @@ class Mongo(DataLayer):
         datasource, filter_, projection, _ = self._datasource_ex(
             resource,
             lookup,
-            client_projection)
+            client_projection,
+            check_auth_value=check_auth_value,
+            force_auth_field_projection=force_auth_field_projection)
 
         if (config.DOMAIN[resource]['soft_delete']) and \
                 (not req or not req.show_deleted) and \
                 (not self.query_contains_field(lookup, config.DELETED)):
             filter_ = self.combine_queries(
                 filter_, {config.DELETED: {"$ne": True}})
-
+        # Here, we feed pymongo with `None` if projection is empty.
         return self.pymongo(resource).db[datasource] \
-                                     .find_one(filter_, projection)
+                                     .find_one(filter_, projection or None)
 
     def find_one_raw(self, resource, **lookup):
         """ Retrieves a single raw document.
@@ -387,9 +390,11 @@ class Mongo(DataLayer):
         datasource, spec, projection, _ = self._datasource_ex(
             resource, query=query, client_projection=client_projection
         )
-
+        # projection of {} return all fields in MongoDB, but
+        # pymongo will only return `_id`. It's a design flaw upstream.
+        # Here, we feed pymongo with `None` if projection is empty.
         documents = self.pymongo(resource).db[datasource].find(
-            filter=spec, projection=projection
+            filter=spec, projection=(projection or None)
         )
         return documents
 

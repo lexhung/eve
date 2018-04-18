@@ -8,6 +8,23 @@ Development
 
 Version 0.8
 ~~~~~~~~~~~
+- New: Add suport for mongo's ``$box`` geo query operator. Closes #1122.
+- New: support for partial media requests. Clients can request partial file
+  downloads by adding a ``Range`` header to their media request (Marsch Huynh).
+- Python 2.6 is deprecated. This is the last release supporting Python 2.6, and
+  you should upgrade to Python 3 as soon as possible. Closes #1129.
+- Fix: PUT behavior with User Restricted Resource Access. Ensure that, under
+  every circumstance, users are unable to overwrite items owned by other users
+  (Luca Moretto).
+- Fix: OPLOG skipped even if ``OPLOG = True``. Closes #1074 (Hung Le).
+- Fix: Cannot define default projection and request specific field. Closes
+  #1036 (DHuan).
+- Dev: pin testfixtures to v5.x as latest releases break on Python 2.6.
+  Addresses #1128.
+- New: Add support for mongo's ``$caseSensitive`` and ``$diactricSensitive``
+  query operators (Artem Kolesnikov).
+- Fix: ``VALIDATE_FILTERS`` and ``ALLOWED_FILTERS`` do not work with
+  sub-document fields. Closes #1123 (Luca Moretto).
 - Fix documentation typos (Olof Johansson)
 - Fix a changelog typo (kreynen).
 - Update: bump Flask requirement to <=0.13. Closes #1111.
@@ -20,17 +37,18 @@ Version 0.8
   (Marcin Puhacz).
 - Change: ``JSON`` and ``XML`` settings are deprecated and will be removed in
   a future update. Use ``RENDERERS`` instead (Marcin Puhacz).
-- New: Refactor index creation. We now have a new 
+- New: Refactor index creation. We now have a new
   ``eve.io.mongo.ensure_mongo_indexes()`` function which ensures that eventual
-  ``mongo_indexes`` defined for a resource are created on the active
-  database. The function can be imported and invoked, for example in
-  multi-db workflows where a db is activated based on the
-  authenticated user performing the request (via custom auth classes).
+  ``mongo_indexes`` defined for a resource are created on the active database.
+  The function can be imported and invoked, for example in multi-db workflows
+  where a db is activated based on the authenticated user performing the
+  request (via custom auth classes).
 - Fix: add sphinxcontrib-embedly to dev-requirements.txt.
 - New: when the media endpoint is enabled, the default authentication class
   will be used to secure  it. Closes #1083.
 - New: Add support for MongoDB bitwise query operators ``$bitsAllClear``,
-  ``bitsAllSet``, ``bitsAnyClear``, ``bitsAnySet``. Closes 1053 (Qiang Zhang).
+  ``$bitsAllSet``, ``$bitsAnyClear``, ``$bitsAnySet``. Closes 1053 (Qiang
+  Zhang).
 - Fix: Aggregation query parameter does not replace keys in the lists. Closes
   #1025 (Serge Kir).
 - Fix: Removed OrderedDict dependency; use ``OrderedDict`` from
