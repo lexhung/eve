@@ -992,6 +992,7 @@ def ensure_mongo_indexes(app, resource):
 
     .. versionaddded:: 0.8
     """
+
     mongo_indexes = app.config["DOMAIN"][resource]["mongo_indexes"]
     if not mongo_indexes:
         return
@@ -1042,7 +1043,7 @@ def _create_index(app, resource, name, list_of_keys, index_options):
     try:
         # mongo_prefix might have been set by Auth class instance
         px = g.get("mongo_prefix")
-    except:
+    except Exception:
         px = app.config["DOMAIN"][resource].get("mongo_prefix", "MONGO")
 
     with app.app_context():
@@ -1051,11 +1052,15 @@ def _create_index(app, resource, name, list_of_keys, index_options):
     kw = copy(index_options)
     kw["name"] = name
 
-    colls = [db[collection]]
-    if app.config["DOMAIN"][resource]["versioning"]:
-        colls.append(db["%s_versions" % collection])
+    coll_suffix = ':%s' % collection
+    coll_names = set(c for c in db.collection_names() if c.endswith(coll_suffix))
+    coll_names.add(collection)
 
-    for coll in colls:
+    if app.config["DOMAIN"][resource]["versioning"]:
+        coll_names.add("%s_versions" % collection)
+
+    for coll_name in coll_names:
+        coll = db[coll_name]
         try:
             coll.create_index(list_of_keys, **kw)
         except pymongo.errors.OperationFailure as e:

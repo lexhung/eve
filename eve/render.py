@@ -459,7 +459,7 @@ class XMLRenderer(Renderer):
         """
         try:
             xml = "".join([cls.xml_item(item) for item in data[config.ITEMS]])
-        except:
+        except Exception:
             xml = cls.xml_dict(data)
         return xml
 
