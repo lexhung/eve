@@ -140,6 +140,15 @@ uppercase.
                                     resource schema. Invalid filters will throw
                                     an exception. Defaults to ``False``.
 
+                                    Word of caution: validation on filter
+                                    expressions involving fields with custom
+                                    rules or types might have a considerable
+                                    impact on performance. This is the case,
+                                    for example, with ``data_relation``-rule
+                                    fields. Consider excluding heavy-duty
+                                    fields from filters (see
+                                    ``ALLOWED_FILTERS``).
+
 ``SORTING``                         ``True`` if sorting is supported for ``GET``
                                     requests, otherwise ``False``. Can be
                                     overridden by resource settings. Defaults
@@ -754,6 +763,20 @@ uppercase.
                                     disable this feature, and a ``404`` will be
                                     returned instead. Defaults to ``True``.
 
+``MERGE_NESTED_DOCUMENTS``          If ``True``, updates to nested fields are
+                                    merged with the current data on ``PATCH``.
+                                    If ``False``, the updates overwrite the
+                                    current data. Defaults to ``True``.
+
+``NORMALIZE_DOTTED_FIELDS``         If ``True``, dotted fields are parsed
+                                    and processed as subdocument fields. If
+                                    ``False``, dotted fields are left unparsed
+                                    and unprocessed, and the payload is passed
+                                    to the underlying data-layer as-is. Please
+                                    note that with the default Mongo layer,
+                                    setting this to ``False`` will result in an
+                                    error. Defaults to ``True``.
+
 =================================== =========================================
 
 .. _domain:
@@ -1063,7 +1086,7 @@ always lowercase.
                                 the endpoint, which is still accessible from
                                 the Eve data layer. See
                                 :ref:`internal_resources` for more
-                                informations. Defaults to ``False``.
+                                information. Defaults to ``False``.
 
 ``etag_ignore_fields``          List of fields that
                                 should not be used to compute the ETag value.
@@ -1083,6 +1106,20 @@ always lowercase.
 ``soft_delete``                 When ``True`` this option enables the
                                 :ref:`soft_delete` feature for this resource.
                                 Locally overrides ``SOFT_DELETE``.
+
+``merge_nested_documents``      If ``True``, updates to nested fields are
+                                merged with the current data on ``PATCH``.
+                                If ``False``, the updates overwrite the
+                                current data. Locally overrides
+                                ``MERGE_NESTED_DOCUMENTS``.
+``normalize_dotted_fields``     If ``True``, dotted fields are parsed and
+                                processed as subdocument fields. If ``False``,
+                                dotted fields are left unparsed and
+                                unprocessed, and the payload is passed to the
+                                underlying data-layer as-is. Please note that
+                                with the default Mongo layer, setting this to
+                                ``False`` will result in an error. Defaults to
+                                ``True``.
 
 =============================== ===============================================
 
@@ -1189,7 +1226,7 @@ defining the field validation rules. Allowed validation rules are:
                                 - ``decimal``
 
                                 See :ref:`GeoJSON <geojson_feature>` for more
-                                informations geo fields.
+                                information geo fields.
 
 ``required``                    If ``True``, the field is mandatory on
                                 insertion.
@@ -1247,7 +1284,7 @@ defining the field validation rules. Allowed validation rules are:
 
 ``data_relation``               Allows to specify a referential integrity rule
                                 that the value must satisfy in order to
-                                validate. It is a dict with three keys:
+                                validate. It is a dict with four keys:
 
                                 - ``resource``: the name of the resource being referenced;
                                 - ``field``: the field name in the foreign resource;
@@ -1388,7 +1425,7 @@ of the database collection. It is a dictionary with four allowed keys:
 
 ``filter``                      Database query used to retrieve and validate
                                 data. If omitted, by default the whole
-                                collection is retrievied. See :ref:`filter`.
+                                collection is retrieved. See :ref:`filter`.
 
 ``projection``                  Fieldset exposed by the endpoint. If omitted,
                                 by default all fields will be returned to the
@@ -1402,7 +1439,7 @@ of the database collection. It is a dictionary with four allowed keys:
                                 ``'datasource': {'default_sort': [('name',
                                 1)]}``
 
-                                For more informations on sort and filters see
+                                For more information on sort and filters see
                                 :ref:`filters`.
 
 ``aggregation``                 Aggregation pipeline and options. When used all
@@ -1416,7 +1453,7 @@ of the database collection. It is a dictionary with four allowed keys:
 
                                 - ``pipeline``. The aggregation pipeline.
                                   Syntax must match the one supported by
-                                  PyMongo. For more informations see `PyMongo
+                                  PyMongo. For more information see `PyMongo
                                   Aggregation Examples`_ and the official
                                   `MongoDB Aggregation Framework`_
                                   documentation.
@@ -1495,7 +1532,7 @@ resource keyword allows you to redefine the fieldset.
 
 When you want to hide some *secret fields* from client, you should use
 inclusive projection setting and include all fields should be exposed. While,
-when you want to limit default responsesto certain fields but still allow them
+when you want to limit default responses to certain fields but still allow them
 to be accessible through client-side projections, you should use exclusive
 projection setting and exclude fields should be omitted.
 
@@ -1535,7 +1572,7 @@ The above will include all document fields but `username`. However, the
 following API call will return `username` this time. Thus, you can exploit this
 behaviour to serve media fields or other expensive fields.
 
-In most cases, none or inclusive projection setting is more preferred. With
+In most cases, none or inclusive projection setting is preferred. With
 inclusive projection, secret fields are taken care from server side, and default
 fields returned can be defined by short-cut functions from client-side.
 

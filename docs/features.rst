@@ -322,7 +322,7 @@ Native Python syntax works like this:
     HTTP/1.1 200 OK
 
 Both syntaxes allow for conditional and logical And/Or operators, however
-nested and combined. 
+nested and combined.
 
 Filters are enabled by default on all document fields. However, the API
 maintainer can choose to disable them all and/or whitelist allowed ones (see
@@ -367,7 +367,7 @@ You can pretty print the response by specifying a query parameter named
                 "_created": "Tue, 19 Apr 2016 08:19:00 GMT",
                 "_id": "5715e9f438345b3510d27eb8",
                 "_etag": "86dc6b45fe7e2f41f1ca53a0e8fda81224229799"
-            }, 
+            },
             ...
         ]
     }
@@ -491,7 +491,7 @@ performance.
 .. _rendering:
 
 Rendering
-----------------------
+---------
 Eve responses are automatically rendered as JSON (the default) or XML,
 depending on the request ``Accept`` header. Inbound documents (for inserts and
 edits) are in JSON format.
@@ -608,7 +608,7 @@ control is disabled no ETag is provided with responses. You should be careful
 about disabling this feature, as you would effectively open your API to the
 risk of older versions replacing your documents. Alternatively, ETag match
 checks can be made optional by the client if ``ENFORCE_IF_MATCH`` is disabled.
-When concurrenncy check enforcement is disabled, requests with the ``If-Match``
+When concurrency check enforcement is disabled, requests with the ``If-Match``
 header will be processed as conditional requests, and requests made without
 the ``If-Match`` header will not be processed as conditional.
 
@@ -638,7 +638,7 @@ metadata:
 
 When a ``201 Created`` is returned following a POST request, the ``Location``
 header is also included with the response. Its value is the URI to the new
-document. 
+document.
 
 In order to reduce the number of loopbacks, a client might also submit
 multiple documents with a single request. All it needs to do is enclose the
@@ -676,7 +676,7 @@ The response will be a list itself, with the state of each document:
 When multiple documents are submitted the API takes advantage of MongoDB *bulk
 insert* capabilities which means that not only there's just one request
 traveling from the client to the remote API, but also that a single loopback is
-performed between the API server and the database. 
+performed between the API server and the database.
 
 In case of successful multiple inserts, keep in mind that the ``Location``
 header only returns the URI of the first created document.
@@ -871,7 +871,7 @@ Default and Nullable Values
 ---------------------------
 Fields can have default values and nullable types. When serving POST (create)
 requests, missing fields will be assigned the configured default values. See
-``default`` and ``nullable`` keywords in :ref:`schema` for more informations.
+``default`` and ``nullable`` keywords in :ref:`schema` for more information.
 
 Predefined Database Filters
 ---------------------------
@@ -1376,7 +1376,7 @@ the items as needed before they are returned to the client.
 
 It is important to note that fetch events will work with `Document
 Versioning`_ for specific document versions or accessing all document
-versions with ``?version=all``, but they *will not* work when acessing diffs
+versions with ``?version=all``, but they *will not* work when accessing diffs
 of all versions with ``?version=diffs``.
 
 
@@ -1391,7 +1391,7 @@ These are the insert events with their method signature:
 - ``on_inserted_<resource_name>(items)``
 
 When a POST requests hits the API and new items are about to be stored in
-the database, these vents are fired:
+the database, these events are fired:
 
 - ``on_insert`` for every resource endpoint.
 - ``on_insert_<resource_name>`` for the specific `<resource_name>` resource
@@ -1450,7 +1450,7 @@ accessory action.
 After the item has been replaced, these other two events are fired:
 
 - ``on_replaced`` for any resource item endpoint.
-- ``on_replaced_<resource_name>`` for the specific resource endpont.
+- ``on_replaced_<resource_name>`` for the specific resource endpoint.
 
 Update Events
 ^^^^^^^^^^^^^
@@ -1531,9 +1531,44 @@ notified of such a disastrous occurrence by hooking a callback function to the
 
 - ``on_delete_resource_originals`` for any resource hit by the request after having retrieved the originals documents.
 - ``on_delete_resource_originals_<resource_name>`` for the specific `<resource_name>` resource endpoint
-  hit by the DELETE after having retrieved the original document. NOTE: those two event are useful in order to
-  perform some business logic before the actual remove operation given the look up and the list of originals
+  hit by the DELETE after having retrieved the original document.
 
+NOTE: those two event are useful in order to perform some business
+logic before the actual remove operation given the look up and the
+list of originals
+
+.. _aggregation_hooks:
+
+Aggregation event hooks
+~~~~~~~~~~~~~~~~~~~~~~~
+You can also attach one or more callbacks to your aggregation endpoints. The
+``before_aggregation`` event is fired when an aggregation is about to be
+performed. Any attached callback function will receive both the endpoint name
+and the aggregation pipeline as arguments. The pipeline can then be altered if
+needed.
+
+.. code-block:: pycon
+
+    >>> def on_aggregate(endpoint, pipeline):
+    ...   pipeline.append({"$unwind": "$tags"})
+
+    >>> app = Eve()
+    >>> app.before_aggregation += on_aggregate
+
+The ``after_aggregation`` event is fired when the aggregation has been
+performed. An attached callback function could leverage this event to modify
+the documents before they are returned to the client.
+
+.. code-block:: pycon
+
+   >>> def alter_documents(endpoint, documents):
+   ...   for document in documents:
+   ...     document['hello'] = 'well, hello!'
+
+   >>> app = Eve()
+   >>> app.after_aggregation += alter_documents
+
+For more information on aggregation support, see :ref:`aggregation`
 
 
 .. admonition:: Please note
@@ -1773,7 +1808,7 @@ additional fields except the file fields will be treated as ``strings``
 for all field validation purposes.  If you have already defined some of
 the resource fields to be of different type (boolean, number, list etc)
 the validation rules for these fields would fail, preventing you to
-succesffully submit your resource.
+successffully submit your resource.
 
 If you still want to be able to perform field validation in this case, you
 will have to turn on ``MULTIPART_FORM_FIELDS_AS_JSON`` in your settings
@@ -1817,10 +1852,10 @@ encoded in GeoJSON_ format. All GeoJSON objects supported by MongoDB_ are availa
     - ``GeometryCollection``
 
 All these objects are implemented as native Eve data types (see :ref:`schema`)
-so they are are subject to the proper validation. 
+so they are are subject to the proper validation.
 
 In the example below we are extending the `people` endpoint by adding
-a ``location`` field is of type Point_.
+a ``location`` field of type Point_.
 
 .. code-block:: javascript
 
@@ -1973,7 +2008,7 @@ time a custom function is invoked.
             'url: %(url)s, method:%(method)s'))
 
         # the default log level is set to WARNING, so
-        # we have to explictly set the logging level
+        # we have to explicitly set the logging level
         # to INFO to get our custom message logged.
         app.logger.setLevel(logging.INFO)
 
@@ -1998,7 +2033,7 @@ oplog is simply a server log. What makes it a little bit different is that it
 can be exposed as a read-only endpoint, thus allowing clients to query it as
 they would with any other API endpoint.
 
-Every oplog entry contains informations about the document and the operation:
+Every oplog entry contains information about the document and the operation:
 
 - Operation performed
 - Unique ID of the document
@@ -2054,12 +2089,12 @@ more on this later).
 
 Please note that by default the ``c`` (changes) field is not included for
 ``POST`` operations. You can add ``POST`` to the ``OPLOG_CHANGE_METHODS``
-setting (see :ref:`global`) if you whish the whole document to be included on
+setting (see :ref:`global`) if you wish the whole document to be included on
 every insertion.
 
 How is the oplog operated?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
-Six settings are dedicated to the OpLog:
+Seven settings are dedicated to the OpLog:
 
 - ``OPLOG`` switches the oplog feature on and off. Defaults to ``False``.
 - ``OPLOG_NAME`` is the name of the oplog collection on the database. Defaults to ``oplog``.
@@ -2072,7 +2107,7 @@ Six settings are dedicated to the OpLog:
 
 As you can see the oplog feature is turned off by default. Also, since
 ``OPLOG_ENDPOINT`` defaults to ``None``, even if you switch the feature on no
-public oplog endpoint will be available. You will have to explictly set the
+public oplog endpoint will be available. You will have to explicitly set the
 endpoint name in order to expose your oplog to the public.
 
 The Oplog endpoint
@@ -2120,13 +2155,13 @@ each entry:
     app.on_oplog_push += oplog_extras
     app.run()
 
-Please note that unless you explictly set ``OPLOG_RETURN_EXTRA_FIELD`` to
+Please note that unless you explicitly set ``OPLOG_RETURN_EXTRA_FIELD`` to
 ``True``, the ``extra`` field will *not* be returned by the ``OPLOG_ENDPOINT``.
 
 .. note::
 
     Are you on MongoDB? Consider making the oplog a `capped collection`_. Also,
-    in case you are wondering yes, the Eve oplog is blatantly inpsired by the
+    in case you are wondering yes, the Eve oplog is blatantly inspired by the
     awesome `Replica Set Oplog`_.
 
 .. _schema_endpoint:
@@ -2137,7 +2172,7 @@ Resource schema can be exposed to API clients by enabling Eve's schema
 endpoint. To do so, set the ``SCHEMA_ENDPOINT`` configuration option to the API
 endpoint name from which you want to serve schema data. Once enabled, Eve will
 treat the endpoint as a read only resource containing JSON encoded Cerberus
-schema definitons, indexed by resource name. Resource visibility and
+schema definitions, indexed by resource name. Resource visibility and
 authorization settings are honored, so internal resources or resources for
 which a request does not have read authentication will not be accessible at the
 schema endpoint. By default, ``SCHEMA_ENDPOINT`` is set to ``None``.
@@ -2189,7 +2224,7 @@ Let's update the pipeline a little bit:
     }
 
 As you can see the `count` field is now going to sum the value of ``$value``,
-which will be set by the client upon perfoming the request:
+which will be set by the client upon performing the request:
 
 ::
 
@@ -2202,7 +2237,9 @@ field/value pairs. Like with all other keywords, you can change ``aggregate``
 to a keyword of your liking, just set ``QUERY_AGGREGATION`` in your settings.
 
 You can also set all options natively supported by PyMongo. For more
-informations on aggregation see :ref:`datasource`.
+information on aggregation see :ref:`datasource`.
+
+Custom callback functions can be attached to the ``before_aggregation`` and ``after_aggregation`` event hooks. For more information, see :ref:`aggregation_hooks`.
 
 Limitations
 ~~~~~~~~~~~
@@ -2236,6 +2273,7 @@ pipeline, then the resulting combined pipeline should be optimized.
 A single endpoint cannot serve both regular and aggregation results. However,
 since it is possible to setup multiple endpoints all serving from the same
 datasource (see :ref:`source`), similar functionality can be easily achieved.
+
 
 MongoDB and SQL Support
 ------------------------
