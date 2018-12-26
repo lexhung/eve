@@ -76,10 +76,6 @@ def get_document(
       processing of new configuration settings: `filters`, `sorting`, `paging`.
     """
     req = parse_request(resource)
-    if config.DOMAIN[resource]["soft_delete"]:
-        # get_document should always fetch soft deleted documents from the db
-        # callers must handle soft deleted documents
-        req.show_deleted = True
 
     if original:
         document = original

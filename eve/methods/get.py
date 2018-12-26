@@ -334,12 +334,6 @@ def getitem_internal(resource, **lookup):
     resource_def = config.DOMAIN[resource]
     embedded_fields = resolve_embedded_fields(resource, req)
 
-    soft_delete_enabled = config.DOMAIN[resource]["soft_delete"]
-    if soft_delete_enabled:
-        # GET requests should always fetch soft deleted documents from the db
-        # They are handled and included in 404 responses below.
-        req.show_deleted = True
-
     document = app.data.find_one(resource, req, **lookup)
     if not document:
         abort(404)
@@ -441,15 +435,6 @@ def getitem_internal(resource, **lookup):
             response[config.ITEMS] = documents
         else:
             response = documents
-    elif soft_delete_enabled and document.get(config.DELETED) is True:
-        # This document was soft deleted. Respond with 404 and the deleted
-        # version of the document.
-        document[config.STATUS] = (config.STATUS_ERR,)
-        document[config.ERROR] = {
-            "code": 404,
-            "message": "The requested URL was not found on this server.",
-        }
-        return document, last_modified, etag, 404
     else:
         response = document
 
